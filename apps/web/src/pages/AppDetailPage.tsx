@@ -7,6 +7,8 @@ import { Button } from "../components/ui/Button";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
 import { StatusPill } from "../components/ui/StatusPill";
 import { DomainsCard } from "../components/DomainsCard";
+import { MetricsChart } from "../components/MetricsChart";
+import { useMetricSamples } from "../hooks/useMetricSamples";
 import { bytes, ms } from "../lib/format";
 
 const DEPLOY_STATUS_STYLE: Record<string, string> = {
@@ -29,6 +31,8 @@ export default function AppDetailPage() {
   const [deployments, setDeployments] = useState<PublicDeployment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const samples = useMetricSamples(app?.pm2 ?? null);
 
   const load = useCallback(async () => {
     if (!currentTeamId || !appId) return;
@@ -86,14 +90,15 @@ export default function AppDetailPage() {
     }
   }
 
-  async function onDeploy() {
+  async function onDeploy(commitSha?: string) {
     if (!currentTeamId || !appId) return;
-    setBusy("deploy");
+    const tag = commitSha ?? "deploy";
+    setBusy(tag);
     setError(null);
     try {
       const dep = await api<PublicDeployment>(
         `/teams/${currentTeamId}/apps/${appId}/deploy`,
-        { method: "POST", body: {} },
+        { method: "POST", body: commitSha ? { commitSha } : {} },
       );
       navigate(`/apps/${appId}/deployments/${dep.id}`);
     } catch (err) {
@@ -123,7 +128,7 @@ export default function AppDetailPage() {
             <Button
               size="sm"
               disabled={busy !== null}
-              onClick={onDeploy}
+              onClick={() => onDeploy()}
             >
               {busy === "deploy" ? "Deploying…" : "Deploy"}
             </Button>
@@ -215,6 +220,16 @@ export default function AppDetailPage() {
         </Card>
       </div>
 
+      <Card>
+        <CardTitle>Metrics</CardTitle>
+        <CardDescription className="mt-1">
+          Live PM2 samples, captured while this page is open.
+        </CardDescription>
+        <div className="mt-4">
+          <MetricsChart samples={samples} />
+        </div>
+      </Card>
+
       {currentTeamId && (
         <DomainsCard
           teamId={currentTeamId}
@@ -233,13 +248,15 @@ export default function AppDetailPage() {
         </CardDescription>
         {deployments.length > 0 && (
           <ul className="mt-4 divide-y divide-neutral-800">
-            {deployments.map((d) => (
-              <li key={d.id} className="py-3">
-                <Link
-                  to={`/apps/${app.id}/deployments/${d.id}`}
-                  className="block hover:opacity-80"
-                >
-                  <div className="flex items-center gap-3">
+            {deployments.map((d) => {
+              const canRedeploy =
+                canManage && app.sourceType === "github" && Boolean(d.commitSha);
+              return (
+                <li key={d.id} className="flex items-center gap-3 py-3">
+                  <Link
+                    to={`/apps/${app.id}/deployments/${d.id}`}
+                    className="flex flex-1 items-center gap-3 hover:opacity-80"
+                  >
                     <span
                       className={`font-mono text-xs uppercase tracking-wider ${
                         DEPLOY_STATUS_STYLE[d.status] ?? "text-neutral-400"
@@ -258,10 +275,20 @@ export default function AppDetailPage() {
                     <span className="ml-auto text-xs text-neutral-500">
                       {d.triggeredBy} · {new Date(d.createdAt).toLocaleString()}
                     </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                  {canRedeploy && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy !== null}
+                      onClick={() => onDeploy(d.commitSha)}
+                    >
+                      {busy === d.commitSha ? "Redeploying…" : "Redeploy"}
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
