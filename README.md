@@ -69,6 +69,10 @@ bun run dev               # API on :4000, web on :5173
 
 Open <http://localhost:5173>, sign up, create a team.
 
+For a real deployment with systemd, hardened Mongo, Caddy in front of the
+panel, daily backups, and a security checklist, see
+**[docs/PRODUCTION.md](docs/PRODUCTION.md)**.
+
 ### GitHub App (optional, required for repo-based deploys)
 
 1. <https://github.com/settings/apps/new> — create a new App in your account or organisation.
