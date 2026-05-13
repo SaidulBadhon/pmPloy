@@ -45,7 +45,12 @@ export default function PlatformGithubPage() {
   }
 
   async function disconnect() {
-    if (!confirm("Disconnect the GitHub App? Teams will lose access to repos.")) return;
+    if (
+      !confirm(
+        "Disconnect the GitHub App? Existing webhooks will stop being accepted and every team will need to re-install once a new App is registered.",
+      )
+    )
+      return;
     setBusy(true);
     try {
       await api(`/platform/github`, { method: "DELETE" });
@@ -69,9 +74,9 @@ export default function PlatformGithubPage() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {status === null ? (
+      {status === null && !error ? (
         <p className="text-neutral-500">Loading…</p>
-      ) : status.configured ? (
+      ) : status === null ? null : status.configured ? (
         <Card>
           <CardTitle>GitHub App configured</CardTitle>
           <CardDescription className="mt-1">

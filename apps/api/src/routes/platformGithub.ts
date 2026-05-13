@@ -104,9 +104,16 @@ route.get("/platform/github/manifest/callback", requirePlatformAdmin, async (c) 
     },
   });
   if (!res.ok) {
+    // Log the upstream body server-side; don't echo it to the browser. GitHub's
+    // success response includes credentials, so on a future API change a partial
+    // payload could leak through this path if we forwarded the body.
     const text = await res.text();
+    console.error(
+      `[platformGithub] manifest exchange failed (${res.status}):`,
+      text,
+    );
     return c.json(
-      { error: "manifest_exchange_failed", status: res.status, body: text },
+      { error: "manifest_exchange_failed", status: res.status },
       502,
     );
   }
