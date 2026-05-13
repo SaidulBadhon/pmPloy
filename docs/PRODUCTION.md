@@ -100,10 +100,18 @@ Ubuntu 24.04 LTS.
 
 ### 4.1 Create a dedicated user
 
-Run user apps and pmPloy under a non-root account:
+Run user apps and pmPloy under a non-root account. The `pmploy` user needs a real
+password for `su`, optional `sudo` prompts, and emergency console access. The
+snippet below creates the account, then sets the password to `password123` via
+`chpasswd` — **swap that string for a long random passphrase** before trusting the box
+(anything exposed to SSH or with `sudo`); `password123` is only convenient for local
+bring-up experiments. `--disabled-password` on `adduser` only skips interactive
+prompting; `chpasswd` immediately applies your chosen secret. Remote SSH should
+still use key auth only (see [section 15](#15-security-checklist)).
 
 ```bash
-adduser --disabled-password --gecos "" pmploy
+adduser --gecos "" --disabled-password pmploy
+echo 'pmploy:password123' | chpasswd
 usermod -aG sudo pmploy           # temporarily for setup; remove later if you like
 ```
 
@@ -146,18 +154,39 @@ Verify PM2 is alive across reboots:
 systemctl status pm2-pmploy
 ```
 
+**Keep Node.js patched.** Bootstrap only installs whatever `apt` resolves that day.
+Whenever you routinely patch the OS, refresh Node so PM2’s runtime gets security fixes:
+
+```bash
+# As root — use the same cadence as general `apt upgrade`
+apt update
+apt upgrade nodejs
+node --version   # confirm the expected major still (here: 22.x from NodeSource)
+```
+
+If NodeSource publishes a newer **major** than the `setup_*` script you used initially,
+re-run that `curl … | bash -` line from above, then `apt install nodejs` again.
+
+After upgrading the `nodejs` package, recycle PM2 so the daemon picks up the new binary:
+
+```bash
+sudo systemctl restart pm2-pmploy
+```
+
 ### 4.4 Install MongoDB
 
 ```bash
 # As root
-curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc \
-  | gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
-echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] \
-  https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/7.0 multiverse" \
+rm /etc/apt/sources.list.d/mongodb-org-7.0.list
+
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" \
   > /etc/apt/sources.list.d/mongodb-org-7.0.list
+
 apt update
 apt install -y mongodb-org
 systemctl enable --now mongod
+systemctl status mongod
+mongosh
 ```
 
 By default MongoDB on Ubuntu binds to `127.0.0.1` only. Verify:
@@ -608,7 +637,23 @@ refresh during the API restart — that's expected; it recovers on its own.
 User-app processes keep running through a platform upgrade — only the API
 restarts. They only restart when *you* hit Restart/Deploy in the UI.
 
-### 12.2 Manual upgrade (SSH)
+### 12.2 Node.js on the host (PM2 runtime)
+
+Updating pmPloy’s code (below) does **not** upgrade Node. Treat `nodejs` like any other
+installed package:
+
+```bash
+# As root
+apt update
+apt upgrade nodejs
+node --version
+sudo systemctl restart pm2-pmploy
+```
+
+If you deliberately move to another NodeSource **major**, re-run the `setup_*` script
+from [section 4.3](#43-install-node--pm2), then `apt install nodejs`.
+
+### 12.3 Manual upgrade (SSH)
 
 ```bash
 su - pmploy
@@ -622,7 +667,7 @@ exit
 sudo systemctl restart pmploy-api
 ```
 
-### 12.3 Rolling back the platform
+### 12.4 Rolling back the platform
 
 **From the UI**: Platform → Rollback section → paste the previous commit sha
 (or branch/tag) → Roll back. Same script, just with an explicit target.
@@ -638,7 +683,7 @@ bun --filter @pmploy/web run build
 sudo systemctl restart pmploy-api
 ```
 
-### 12.4 Rolling back a deployed app
+### 12.5 Rolling back a deployed app
 
 Use the **Redeploy** button on any past deployment row in the UI — pmPloy
 re-clones at that commit, rebuilds, and swaps the PM2 process. No git surgery
@@ -705,6 +750,7 @@ su - pmploy -c 'pm2 logs pmploy:<appId> --lines 200'
 Run through this list once before pointing real users at the box.
 
 - [ ] OS is fully patched (`apt update && apt upgrade`)
+- [ ] Host Node.js (`nodejs` / PM2) is current — `apt upgrade nodejs`; see [section 12.2](#122-nodejs-on-the-host-pm2-runtime)
 - [ ] `ufw` is enabled and only 22/80/443 are open externally
 - [ ] SSH uses key auth only (`PasswordAuthentication no` in `sshd_config`)
 - [ ] The `pmploy` user has been removed from sudoers after setup is done
