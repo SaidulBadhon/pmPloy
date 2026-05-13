@@ -23,6 +23,8 @@ import { getHeadCommit, getInstallationToken } from "./github.ts";
 import { deployBus, deployTopic } from "./pubsub.ts";
 import { caddy } from "./caddy.ts";
 import { Domain } from "../models/Domain.ts";
+import { getDecryptedEnv } from "./envVars.ts";
+import { recordAudit } from "./audit.ts";
 
 const KEEP_DEPLOYMENTS = 3;
 
@@ -96,6 +98,18 @@ async function runDeploy(deploymentId: string): Promise<void> {
     app.status = "running";
     await app.save();
 
+    await recordAudit({
+      teamId: String(app.teamId),
+      userId: dep.triggeredByUserId ? String(dep.triggeredByUserId) : undefined,
+      action: "deploy.live",
+      target: { type: "app", id: String(app._id), label: app.name },
+      meta: {
+        deploymentId,
+        commitSha: dep.commitSha,
+        triggeredBy: dep.triggeredBy,
+      },
+    });
+
     // Best-effort: refresh Caddy routes (port may have changed) and prune.
     await resyncDomains(String(app._id), app.port ?? null, ctx).catch(() => undefined);
     await pruneOldDeployDirs(String(app._id)).catch(() => undefined);
@@ -105,6 +119,13 @@ async function runDeploy(deploymentId: string): Promise<void> {
     await fail(dep, message);
     app.status = "errored";
     await app.save().catch(() => undefined);
+    await recordAudit({
+      teamId: String(app.teamId),
+      userId: dep.triggeredByUserId ? String(dep.triggeredByUserId) : undefined,
+      action: "deploy.failed",
+      target: { type: "app", id: String(app._id), label: app.name },
+      meta: { deploymentId, error: message },
+    });
   } finally {
     deployBus.publish(deployTopic(deploymentId), { type: "done" });
   }
@@ -220,6 +241,7 @@ async function startApp(app: AppDoc, ctx: LogContext): Promise<void> {
   const name = pm2NameForApp(String(app._id));
   // Make sure any prior instance is torn down so it picks up the new cwd.
   await deleteProcess(name).catch(() => undefined);
+  const userEnv = await getDecryptedEnv(String(app._id));
   const info = await startProcess({
     name,
     cwd: app.cwd,
@@ -227,7 +249,7 @@ async function startApp(app: AppDoc, ctx: LogContext): Promise<void> {
     interpreter: app.interpreter || undefined,
     instances: app.instances ?? 1,
     execMode: app.execMode,
-    env: { PORT: String(app.port ?? "") },
+    env: { ...userEnv, PORT: String(app.port ?? "") },
   });
   await ctx.log(`▶ pm2 status: ${info.status}, pid ${info.pid}`);
   // Give PM2 a moment to settle, then re-check.

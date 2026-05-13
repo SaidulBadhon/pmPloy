@@ -13,6 +13,7 @@ import { Membership } from "../models/Membership.ts";
 import { User } from "../models/User.ts";
 import { requireAuth, requireTeamRole, type AuthVars } from "../auth/rbac.ts";
 import { slugify, randomSuffix } from "../lib/slug.ts";
+import { recordAudit } from "../services/audit.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
 
@@ -130,6 +131,15 @@ route.post(
     }).lean();
     if (existing) return c.json({ error: "already a member" }, 409);
     await Membership.create({ teamId, userId: user._id, role });
+    const actor = c.get("user");
+    await recordAudit({
+      teamId,
+      userId: actor.id,
+      userEmail: actor.email,
+      action: "member.add",
+      target: { type: "member", id: String(user._id), label: user.email },
+      meta: { role },
+    });
     return c.json(
       {
         userId: String(user._id),
@@ -162,6 +172,15 @@ route.patch(
       { new: true },
     ).lean();
     if (!m) return c.json({ error: "membership not found" }, 404);
+    const actor = c.get("user");
+    await recordAudit({
+      teamId,
+      userId: actor.id,
+      userEmail: actor.email,
+      action: "member.role_change",
+      target: { type: "member", id: userId },
+      meta: { role: m.role },
+    });
     return c.json({ ok: true, role: m.role });
   },
 );
@@ -181,6 +200,14 @@ route.delete(
     await Membership.deleteOne({
       teamId: new Types.ObjectId(teamId),
       userId: new Types.ObjectId(userId),
+    });
+    const actor = c.get("user");
+    await recordAudit({
+      teamId,
+      userId: actor.id,
+      userEmail: actor.email,
+      action: "member.remove",
+      target: { type: "member", id: userId },
     });
     return c.json({ ok: true });
   },

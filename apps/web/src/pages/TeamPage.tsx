@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { Button } from "../components/ui/Button";
 import { Input, Label } from "../components/ui/Input";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
+import { ActivityCard } from "../components/ActivityCard";
 
 const inviteRoles: Exclude<Role, "owner">[] = ["admin", "member", "viewer"];
 
@@ -208,6 +209,8 @@ export default function TeamPage() {
           </form>
         </Card>
       )}
+
+      {currentTeamId && <ActivityCard teamId={currentTeamId} />}
     </div>
   );
 }

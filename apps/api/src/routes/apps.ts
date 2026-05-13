@@ -21,6 +21,8 @@ import {
   type Pm2Info,
 } from "../services/pm2.ts";
 import { caddy } from "../services/caddy.ts";
+import { getDecryptedEnv } from "../services/envVars.ts";
+import { recordAudit } from "../services/audit.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
 
@@ -116,6 +118,16 @@ route.post(
       pm2Name: pm2NameForApp(String(_id)),
     });
 
+    const user = c.get("user");
+    await recordAudit({
+      teamId,
+      userId: user.id,
+      userEmail: user.email,
+      action: "app.create",
+      target: { type: "app", id: String(app._id), label: app.name },
+      meta: { sourceType: app.sourceType },
+    });
+
     return c.json(applicationView(app, null), 201);
   },
 );
@@ -175,6 +187,14 @@ route.delete(
     }
     await deleteProcess(app.pm2Name).catch(() => undefined);
     await app.deleteOne();
+    const user = c.get("user");
+    await recordAudit({
+      teamId: String(app.teamId),
+      userId: user.id,
+      userEmail: user.email,
+      action: "app.delete",
+      target: { type: "app", id: String(app._id), label: app.name },
+    });
     return c.json({ ok: true });
   },
 );
@@ -200,6 +220,7 @@ route.post(
     try {
       app.status = "deploying";
       await app.save();
+      const userEnv = await getDecryptedEnv(String(app._id));
       const info = await startProcess({
         name: app.pm2Name,
         cwd: app.cwd,
@@ -207,7 +228,7 @@ route.post(
         interpreter: app.interpreter || undefined,
         instances: app.instances ?? 1,
         execMode: app.execMode,
-        env: { PORT: String(app.port ?? "") },
+        env: { ...userEnv, PORT: String(app.port ?? "") },
       });
       app.status = info.status === "online" ? "running" : "errored";
       await app.save();

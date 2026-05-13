@@ -9,6 +9,7 @@ import { Application } from "../models/Application.ts";
 import { Domain, type DomainDoc } from "../models/Domain.ts";
 import { requireAuth, requireTeamRole, type AuthVars } from "../auth/rbac.ts";
 import { caddy } from "../services/caddy.ts";
+import { recordAudit } from "../services/audit.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
 
@@ -95,6 +96,15 @@ route.post(
       dom.lastError = err instanceof Error ? err.message : String(err);
       await dom.save();
     }
+    const user = c.get("user");
+    await recordAudit({
+      teamId: String(app.teamId),
+      userId: user.id,
+      userEmail: user.email,
+      action: "domain.attach",
+      target: { type: "domain", id: String(dom._id), label: dom.host },
+      meta: { appId: String(app._id), appName: app.name },
+    });
     return c.json(view(dom), 201);
   },
 );
@@ -140,6 +150,15 @@ route.delete(
     if (!dom) return c.json({ error: "not found" }, 404);
     await caddy.removeDomain(dom.host).catch(() => undefined);
     await dom.deleteOne();
+    const user = c.get("user");
+    await recordAudit({
+      teamId: String(app.teamId),
+      userId: user.id,
+      userEmail: user.email,
+      action: "domain.detach",
+      target: { type: "domain", id: String(dom._id), label: dom.host },
+      meta: { appId: String(app._id), appName: app.name },
+    });
     return c.json({ ok: true });
   },
 );

@@ -291,3 +291,37 @@ export const CaddyStatusSchema = z.object({
   reachable: z.boolean(),
 });
 export type CaddyStatus = z.infer<typeof CaddyStatusSchema>;
+
+// --- Env vars ---
+
+export const ENV_KEY_REGEX = /^[A-Z_][A-Z0-9_]*$/;
+
+export const EnvVarInputSchema = z.object({
+  key: z.string().trim().min(1).max(120).regex(ENV_KEY_REGEX, "use UPPER_SNAKE_CASE"),
+  value: z.string().max(8192),
+});
+export type EnvVarInput = z.infer<typeof EnvVarInputSchema>;
+
+export const PublicEnvVarSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  // values are write-only; never echoed back to clients.
+  updatedAt: z.string(),
+  createdAt: z.string(),
+});
+export type PublicEnvVar = z.infer<typeof PublicEnvVarSchema>;
+
+// --- Audit log ---
+
+export const PublicAuditEntrySchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  userEmail: z.string(),
+  action: z.string(),
+  targetType: z.string(),
+  targetId: z.string(),
+  targetLabel: z.string(),
+  meta: z.unknown().nullable(),
+  createdAt: z.string(),
+});
+export type PublicAuditEntry = z.infer<typeof PublicAuditEntrySchema>;

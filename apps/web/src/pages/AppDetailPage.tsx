@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
 import { StatusPill } from "../components/ui/StatusPill";
 import { DomainsCard } from "../components/DomainsCard";
+import { EnvVarsCard } from "../components/EnvVarsCard";
 import { MetricsChart } from "../components/MetricsChart";
 import { useMetricSamples } from "../hooks/useMetricSamples";
 import { bytes, ms } from "../lib/format";
@@ -229,6 +230,14 @@ export default function AppDetailPage() {
           <MetricsChart samples={samples} />
         </div>
       </Card>
+
+      {currentTeamId && (
+        <EnvVarsCard
+          teamId={currentTeamId}
+          appId={app.id}
+          canManage={!!canManage}
+        />
+      )}
 
       {currentTeamId && (
         <DomainsCard
