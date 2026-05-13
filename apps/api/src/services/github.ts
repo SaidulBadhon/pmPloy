@@ -1,31 +1,63 @@
 import { App } from "@octokit/app";
 import { verify } from "@octokit/webhooks-methods";
 import { env } from "../env.ts";
+import { getGithubAppConfig } from "./githubAppConfig.ts";
 
 export class GithubNotConfiguredError extends Error {
   constructor() {
     super(
-      "GitHub App not configured. Set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_SLUG.",
+      "GitHub App not configured. A platform admin must register one on the platform settings page.",
     );
   }
 }
 
-let cached: App | null = null;
+type Credentials = {
+  appId: string;
+  privateKey: string;
+  slug: string;
+  webhookSecret: string;
+  source: "database" | "environment";
+};
 
-export function isGithubConfigured(): boolean {
-  return Boolean(env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY);
+async function loadCredentials(): Promise<Credentials | null> {
+  const db = await getGithubAppConfig();
+  if (db) {
+    return {
+      appId: db.appId,
+      privateKey: db.privateKeyPem,
+      slug: db.slug,
+      webhookSecret: db.webhookSecret,
+      source: "database",
+    };
+  }
+  if (env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY) {
+    return {
+      appId: env.GITHUB_APP_ID,
+      privateKey: env.GITHUB_APP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      slug: env.GITHUB_APP_SLUG ?? "",
+      webhookSecret: env.GITHUB_WEBHOOK_SECRET ?? "",
+      source: "environment",
+    };
+  }
+  return null;
 }
 
-export function githubApp(): App {
-  if (!isGithubConfigured()) throw new GithubNotConfiguredError();
-  if (cached) return cached;
-  cached = new App({
-    appId: env.GITHUB_APP_ID!,
-    // Private keys are PKCS#1/PKCS#8 PEMs; convert literal `\n` to newlines so
-    // they can live on a single line in .env files.
-    privateKey: env.GITHUB_APP_PRIVATE_KEY!.replace(/\\n/g, "\n"),
-  });
-  return cached;
+let cached: { appId: string; app: App } | null = null;
+
+export async function isGithubConfigured(): Promise<boolean> {
+  const c = await loadCredentials();
+  return c !== null;
+}
+
+export async function githubApp(): Promise<App> {
+  const creds = await loadCredentials();
+  if (!creds) throw new GithubNotConfiguredError();
+  if (cached && cached.appId === creds.appId) return cached.app;
+  cached = {
+    appId: creds.appId,
+    app: new App({ appId: creds.appId, privateKey: creds.privateKey }),
+  };
+  return cached.app;
 }
 
 export type GithubAccount = {
@@ -35,11 +67,8 @@ export type GithubAccount = {
   avatarUrl: string;
 };
 
-/** Look up the account that owns a given installation. */
-export async function getInstallationAccount(
-  installationId: number,
-): Promise<GithubAccount> {
-  const app = githubApp();
+export async function getInstallationAccount(installationId: number): Promise<GithubAccount> {
+  const app = await githubApp();
   const { data } = await app.octokit.request(
     "GET /app/installations/{installation_id}",
     { installation_id: installationId },
@@ -68,11 +97,8 @@ export type GithubRepo = {
   description: string | null;
 };
 
-/** List repos the installation has access to. Paginates internally. */
-export async function listInstallationRepos(
-  installationId: number,
-): Promise<GithubRepo[]> {
-  const app = githubApp();
+export async function listInstallationRepos(installationId: number): Promise<GithubRepo[]> {
+  const app = await githubApp();
   const installation = await app.getInstallationOctokit(installationId);
   const repos: GithubRepo[] = [];
   let page = 1;
@@ -94,31 +120,21 @@ export async function listInstallationRepos(
     }
     if (data.repositories.length < 100) break;
     page++;
-    if (page > 50) break; // sanity bound
+    if (page > 50) break;
   }
   return repos;
 }
 
-export type GithubBranch = {
-  name: string;
-  sha: string;
-  protected: boolean;
-};
+export type GithubBranch = { name: string; sha: string; protected: boolean };
+export type HeadCommit = { sha: string; message: string; author: string };
 
-export type HeadCommit = {
-  sha: string;
-  message: string;
-  author: string;
-};
-
-/** Resolve the current HEAD commit of a ref (branch name / sha / tag). */
 export async function getHeadCommit(
   installationId: number,
   owner: string,
   repo: string,
   ref: string,
 ): Promise<HeadCommit> {
-  const app = githubApp();
+  const app = await githubApp();
   const installation = await app.getInstallationOctokit(installationId);
   const { data } = await installation.request(
     "GET /repos/{owner}/{repo}/commits/{ref}",
@@ -131,11 +147,8 @@ export async function getHeadCommit(
   };
 }
 
-/** Fetch an installation access token (for git clone over HTTPS). */
-export async function getInstallationToken(
-  installationId: number,
-): Promise<string> {
-  const app = githubApp();
+export async function getInstallationToken(installationId: number): Promise<string> {
+  const app = await githubApp();
   const result = (await app.octokit.auth({
     type: "installation",
     installationId,
@@ -143,13 +156,12 @@ export async function getInstallationToken(
   return result.token;
 }
 
-/** List branches for a repo accessible to the installation. */
 export async function listRepoBranches(
   installationId: number,
   owner: string,
   repo: string,
 ): Promise<GithubBranch[]> {
-  const app = githubApp();
+  const app = await githubApp();
   const installation = await app.getInstallationOctokit(installationId);
   const branches: GithubBranch[] = [];
   let page = 1;
@@ -172,12 +184,12 @@ export async function listRepoBranches(
   return branches;
 }
 
-/** URL the user is sent to in order to install the App against a team. */
-export function installUrl(state: string): string {
-  if (!env.GITHUB_APP_SLUG) {
-    throw new Error("GITHUB_APP_SLUG is not set");
+export async function installUrl(state: string): Promise<string> {
+  const creds = await loadCredentials();
+  if (!creds || !creds.slug) {
+    throw new Error("GitHub App slug is not set");
   }
-  const u = new URL(`https://github.com/apps/${env.GITHUB_APP_SLUG}/installations/new`);
+  const u = new URL(`https://github.com/apps/${creds.slug}/installations/new`);
   u.searchParams.set("state", state);
   return u.toString();
 }
@@ -200,9 +212,11 @@ export async function verifyWebhookSignature(
   payload: string,
   signature: string | null | undefined,
 ): Promise<boolean> {
-  return verifyWebhookSignatureWith(
-    env.GITHUB_WEBHOOK_SECRET ?? "",
-    payload,
-    signature,
-  );
+  const creds = await loadCredentials();
+  return verifyWebhookSignatureWith(creds?.webhookSecret ?? "", payload, signature);
+}
+
+/** Tests / admin actions can force the App client to rebuild on next call. */
+export function _resetGithubAppCache(): void {
+  cached = null;
 }
