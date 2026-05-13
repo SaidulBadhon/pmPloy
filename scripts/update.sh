@@ -41,6 +41,10 @@ trap 'rm -f "$LOCK"' EXIT
 
 cd "$REPO" || { log "✗ cannot cd to $REPO"; exit 1; }
 
+# systemd spawns the API with a minimal PATH, which the API in turn passes to
+# this script. Re-add the common bun install locations so `bun install` works.
+export PATH="$HOME/.bun/bin:/usr/local/bin:$PATH"
+
 log "▶ pmploy self-update starting in $REPO"
 log "▶ HEAD before: $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 
@@ -81,7 +85,11 @@ fi
 log "▶ HEAD after:  $(git rev-parse --short HEAD)"
 
 # --- bun install.
-log "▶ bun install"
+if ! command -v bun >/dev/null 2>&1; then
+  log "✗ bun not on PATH and not at \$HOME/.bun/bin — install bun for the user running pmploy-api"
+  exit 8
+fi
+log "▶ bun install ($(command -v bun))"
 if ! bun install >>"$LOG" 2>&1; then
   log "✗ bun install failed"
   exit 8
