@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -12,6 +13,7 @@ import domainsRoutes from "./routes/domains.ts";
 import envRoutes from "./routes/env.ts";
 import githubRoutes from "./routes/github.ts";
 import githubCallbackRoutes from "./routes/githubCallback.ts";
+import platformRoutes from "./routes/platform.ts";
 import webhookRoutes from "./routes/webhooks.ts";
 
 const app = new Hono();
@@ -46,6 +48,7 @@ app.route("/", domainsRoutes);
 app.route("/", envRoutes);
 app.route("/", githubRoutes);
 app.route("/", githubCallbackRoutes);
+app.route("/", platformRoutes);
 app.route("/", webhookRoutes);
 
 app.onError((err, c) => {
@@ -56,6 +59,14 @@ app.onError((err, c) => {
 connectDb().catch((err) => {
   console.error("[db] connection failed:", err.message);
 });
+
+// Write our PID so the self-updater script can signal us cleanly.
+try {
+  mkdirSync(env.PMPLOY_DATA_DIR, { recursive: true });
+  writeFileSync(`${env.PMPLOY_DATA_DIR}/api.pid`, String(process.pid));
+} catch (err) {
+  console.error("[api] could not write pid file:", err);
+}
 
 console.log(`[api] listening on http://${env.API_HOST}:${env.API_PORT}`);
 

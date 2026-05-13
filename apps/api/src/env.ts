@@ -9,6 +9,8 @@ const schema = z.object({
   ENV_ENCRYPTION_KEY: z.string().default(""),
   CADDY_ADMIN_URL: z.string().url().default("http://localhost:2019"),
   PMPLOY_DATA_DIR: z.string().default("./.pmploy-data"),
+  PMPLOY_REPO_PATH: z.string().default(process.cwd()),
+  PLATFORM_ADMINS: z.string().default(""),
   GITHUB_APP_ID: z.string().optional(),
   GITHUB_APP_PRIVATE_KEY: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),

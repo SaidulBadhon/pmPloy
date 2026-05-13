@@ -16,6 +16,7 @@ import AppDetailPage from "./pages/AppDetailPage";
 import DeploymentDetailPage from "./pages/DeploymentDetailPage";
 import TeamPage from "./pages/TeamPage";
 import GithubSettingsPage from "./pages/GithubSettingsPage";
+import PlatformPage from "./pages/PlatformPage";
 
 function FullScreenLoader() {
   return (
@@ -83,6 +84,7 @@ export default function App() {
           />
           <Route path="team" element={<TeamPage />} />
           <Route path="settings/github" element={<GithubSettingsPage />} />
+          <Route path="settings/platform" element={<PlatformPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

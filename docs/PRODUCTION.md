@@ -227,6 +227,11 @@ GITHUB_APP_PRIVATE_KEY=
 GITHUB_WEBHOOK_SECRET=
 
 PMPLOY_DATA_DIR=/home/pmploy/pmPloy-data
+PMPLOY_REPO_PATH=/home/pmploy/pmPloy
+
+# Operators who can run platform updates from the UI. If empty, the first
+# user to sign up is treated as the platform admin (typical for a personal box).
+PLATFORM_ADMINS=you@example.com
 ```
 
 > **Back up the secrets.** Stash `JWT_SECRET` and especially `ENV_ENCRYPTION_KEY`
@@ -555,6 +560,56 @@ pm2 set pm2-logrotate:compress true
 
 ## 12. Upgrades
 
+You have two paths: **in-product** (point-and-click from the UI) or **manual**
+(SSH in and run git yourself). They produce identical results — the in-product
+flow just runs the same `scripts/update.sh` for you.
+
+### 12.1 In-product self-update
+
+The **Platform** page (in the top nav) lets a designated *platform admin* fetch
+the latest commits, see what's pending, and update with one click. The API
+restarts itself when the build succeeds; user-app PM2 processes keep running
+through it.
+
+**Who can do this:**
+
+- If you set `PLATFORM_ADMINS=alice@example.com,bob@example.com` in `.env`,
+  those users see the management UI.
+- If you leave `PLATFORM_ADMINS` empty, the user with the earliest signup
+  date is treated as the platform admin (the operator, typically).
+
+**How it works under the hood:**
+
+1. The UI calls `POST /platform/update`.
+2. The API spawns `scripts/update.sh` fully detached via `setsid` so it
+   survives the API restart.
+3. The script: acquires a PID lockfile under `$PMPLOY_DATA_DIR/update.pid`,
+   refuses to run if the working tree is dirty, fetches origin, fast-forwards
+   the current branch (or `git checkout`s an explicit target sha for rollback),
+   runs `bun install`, builds the web bundle, and sends `SIGTERM` to the API
+   PID it reads from `$PMPLOY_DATA_DIR/api.pid`.
+4. systemd's `Restart=on-failure` brings the new code up.
+
+**No sudo required** — the API and updater run as the same `pmploy` user, so
+the script can signal the API directly without touching `systemctl`.
+
+**Where to watch progress**: the Platform page polls every 1.5s and shows a
+live tail of `$PMPLOY_DATA_DIR/update.log`. The page itself may briefly fail to
+refresh during the API restart — that's expected; it recovers on its own.
+
+**Safety guarantees:**
+
+- A dirty working tree (anything you've hand-edited on the box) blocks the
+  update. The page tells you so. Resolve it via SSH first.
+- A second update can't start while one is in flight (PID lockfile).
+- If `bun install` or the build fails, the script exits *before* signalling
+  the API — your currently running pmPloy is untouched.
+
+User-app processes keep running through a platform upgrade — only the API
+restarts. They only restart when *you* hit Restart/Deploy in the UI.
+
+### 12.2 Manual upgrade (SSH)
+
 ```bash
 su - pmploy
 cd ~/pmPloy
@@ -567,10 +622,12 @@ exit
 sudo systemctl restart pmploy-api
 ```
 
-User-app processes keep running through a pmPloy upgrade — only the API
-restarts. They only restart when *you* hit Restart/Deploy in the UI.
+### 12.3 Rolling back the platform
 
-### Rolling back the platform
+**From the UI**: Platform → Rollback section → paste the previous commit sha
+(or branch/tag) → Roll back. Same script, just with an explicit target.
+
+**From SSH**:
 
 ```bash
 cd ~/pmPloy
@@ -581,7 +638,7 @@ bun --filter @pmploy/web run build
 sudo systemctl restart pmploy-api
 ```
 
-### Rolling back a deployed app
+### 12.4 Rolling back a deployed app
 
 Use the **Redeploy** button on any past deployment row in the UI — pmPloy
 re-clones at that commit, rebuilds, and swaps the PM2 process. No git surgery

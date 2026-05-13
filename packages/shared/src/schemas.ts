@@ -325,3 +325,41 @@ export const PublicAuditEntrySchema = z.object({
   createdAt: z.string(),
 });
 export type PublicAuditEntry = z.infer<typeof PublicAuditEntrySchema>;
+
+// --- Platform self-update ---
+
+export const CommitSchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  subject: z.string(),
+  author: z.string(),
+  authoredAt: z.string(),
+});
+export type Commit = z.infer<typeof CommitSchema>;
+
+export const PlatformInfoSchema = z.object({
+  repoPath: z.string(),
+  branch: z.string(),
+  head: CommitSchema.nullable(),
+  dirty: z.boolean(),
+  trackingUpstream: z.boolean(),
+  isPlatformAdmin: z.boolean(),
+});
+export type PlatformInfo = z.infer<typeof PlatformInfoSchema>;
+
+export const PlatformCheckResultSchema = z.object({
+  pending: z.array(CommitSchema),
+  updateInProgress: z.boolean(),
+});
+export type PlatformCheckResult = z.infer<typeof PlatformCheckResultSchema>;
+
+export const PlatformStatusSchema = z.object({
+  inProgress: z.boolean(),
+  log: z.string(),
+});
+export type PlatformStatus = z.infer<typeof PlatformStatusSchema>;
+
+export const TriggerUpdateInputSchema = z.object({
+  target: z.string().trim().min(1).max(120).optional(),
+});
+export type TriggerUpdateInput = z.infer<typeof TriggerUpdateInputSchema>;
