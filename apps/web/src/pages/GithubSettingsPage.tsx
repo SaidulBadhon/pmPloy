@@ -108,9 +108,11 @@ export default function GithubSettingsPage() {
         <Card>
           <CardTitle>GitHub App not configured</CardTitle>
           <CardDescription className="mt-1">
-            Set <code>GITHUB_APP_ID</code>, <code>GITHUB_APP_PRIVATE_KEY</code>,
-            <code>GITHUB_APP_SLUG</code>, and <code>GITHUB_WEBHOOK_SECRET</code>
-            on the server, then restart the API.
+            A platform admin must register a GitHub App for this pmPloy instance
+            before teams can connect repos. See{" "}
+            <a className="underline" href="/settings/platform/github">
+              Platform · GitHub
+            </a>.
           </CardDescription>
         </Card>
       )}
