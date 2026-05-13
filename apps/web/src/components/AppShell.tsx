@@ -4,7 +4,7 @@ import { Button } from "./ui/Button";
 import { cn } from "../lib/cn";
 
 const navItems = [
-  { to: "/", label: "Dashboard", end: true },
+  { to: "/", label: "Apps", end: true },
   { to: "/team", label: "Team" },
 ];
 

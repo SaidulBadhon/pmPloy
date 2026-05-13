@@ -90,3 +90,66 @@ export const TeamMemberSchema = z.object({
   role: RoleSchema,
 });
 export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
+// --- Applications ---
+
+export const ExecModeSchema = z.enum(["fork", "cluster"]);
+export type ExecMode = z.infer<typeof ExecModeSchema>;
+
+export const CreateApplicationInputSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  sourceType: z.literal("local").default("local"),
+  cwd: z.string().trim().min(1),
+  script: z.string().trim().min(1),
+  interpreter: z.string().trim().max(40).optional().default(""),
+  instances: z.number().int().min(1).max(64).default(1),
+  execMode: ExecModeSchema.default("fork"),
+});
+export type CreateApplicationInput = z.infer<typeof CreateApplicationInputSchema>;
+
+export const UpdateApplicationInputSchema = CreateApplicationInputSchema.partial().omit({
+  sourceType: true,
+});
+export type UpdateApplicationInput = z.infer<typeof UpdateApplicationInputSchema>;
+
+export const Pm2StatusSchema = z.enum([
+  "online",
+  "stopping",
+  "stopped",
+  "launching",
+  "errored",
+  "one-launch-status",
+  "unknown",
+]);
+export type Pm2Status = z.infer<typeof Pm2StatusSchema>;
+
+export const Pm2InfoSchema = z.object({
+  name: z.string(),
+  pid: z.number(),
+  status: Pm2StatusSchema,
+  cpu: z.number(),
+  memory: z.number(),
+  uptime: z.number(),
+  restarts: z.number(),
+});
+export type Pm2Info = z.infer<typeof Pm2InfoSchema>;
+
+export const PublicApplicationSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  sourceType: z.enum(["local", "github"]),
+  cwd: z.string(),
+  script: z.string(),
+  interpreter: z.string(),
+  instances: z.number(),
+  execMode: ExecModeSchema,
+  port: z.number().nullable(),
+  status: AppStatusSchema,
+  pm2Name: z.string(),
+  pm2: Pm2InfoSchema.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PublicApplication = z.infer<typeof PublicApplicationSchema>;

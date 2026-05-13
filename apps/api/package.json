@@ -16,6 +16,7 @@
     "@pmploy/shared": "workspace:*",
     "hono": "^4.6.14",
     "mongoose": "^8.9.3",
+    "pm2": "^5.4.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
