@@ -1,0 +1,21 @@
+{
+  "name": "pmploy",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter '*' dev",
+    "dev:api": "bun --filter @pmploy/api dev",
+    "dev:web": "bun --filter @pmploy/web dev",
+    "build": "bun --filter '*' build",
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun --filter '*' test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@pmploy/api",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun --hot run src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@pmploy/shared": "workspace:*",
+    "hono": "^4.6.14",
+    "mongoose": "^8.9.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.6.3"
+  }
+}
