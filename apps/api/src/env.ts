@@ -11,6 +11,7 @@ const schema = z.object({
   PMPLOY_DATA_DIR: z.string().default("./.pmploy-data"),
   PMPLOY_REPO_PATH: z.string().default(process.cwd()),
   PLATFORM_ADMINS: z.string().default(""),
+  PUBLIC_ORIGIN: z.string().default(""),
   GITHUB_APP_ID: z.string().optional(),
   GITHUB_APP_PRIVATE_KEY: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
