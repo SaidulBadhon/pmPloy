@@ -7,7 +7,8 @@ const navItems = [
   { to: "/", label: "Apps", end: true },
   { to: "/team", label: "Team" },
   { to: "/settings/github", label: "GitHub" },
-  { to: "/settings/platform", label: "Platform" },
+  { to: "/settings/platform", label: "Platform", end: true },
+  { to: "/settings/platform/github", label: "GitHub App" },
 ];
 
 export default function AppShell() {
