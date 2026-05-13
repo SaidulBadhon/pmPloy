@@ -1,8 +1,23 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import { env } from "./env.ts";
 import { connectDb, dbStatus } from "./db.ts";
+import authRoutes from "./routes/auth.ts";
+import teamsRoutes from "./routes/teams.ts";
 
 const app = new Hono();
+
+app.use("*", logger());
+app.use(
+  "*",
+  cors({
+    origin: (origin) => origin ?? "*",
+    credentials: true,
+    allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.get("/", (c) => c.json({ name: "pmploy-api", version: "0.0.1" }));
 
@@ -13,6 +28,14 @@ app.get("/health", (c) =>
     uptime: process.uptime(),
   }),
 );
+
+app.route("/auth", authRoutes);
+app.route("/teams", teamsRoutes);
+
+app.onError((err, c) => {
+  console.error("[api] error:", err);
+  return c.json({ error: "internal_error", message: err.message }, 500);
+});
 
 connectDb().catch((err) => {
   console.error("[db] connection failed:", err.message);

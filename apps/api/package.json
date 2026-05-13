@@ -12,6 +12,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@hono/zod-validator": "^0.4.2",
     "@pmploy/shared": "workspace:*",
     "hono": "^4.6.14",
     "mongoose": "^8.9.3",
