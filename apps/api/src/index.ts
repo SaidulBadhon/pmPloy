@@ -6,6 +6,8 @@ import { connectDb, dbStatus } from "./db.ts";
 import authRoutes from "./routes/auth.ts";
 import teamsRoutes from "./routes/teams.ts";
 import appsRoutes from "./routes/apps.ts";
+import githubRoutes from "./routes/github.ts";
+import githubCallbackRoutes from "./routes/githubCallback.ts";
 
 const app = new Hono();
 
@@ -33,6 +35,8 @@ app.get("/health", (c) =>
 app.route("/auth", authRoutes);
 app.route("/teams", teamsRoutes);
 app.route("/", appsRoutes);
+app.route("/", githubRoutes);
+app.route("/", githubCallbackRoutes);
 
 app.onError((err, c) => {
   console.error("[api] error:", err);

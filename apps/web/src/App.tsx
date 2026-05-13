@@ -14,6 +14,7 @@ import AppsListPage from "./pages/AppsListPage";
 import NewAppPage from "./pages/NewAppPage";
 import AppDetailPage from "./pages/AppDetailPage";
 import TeamPage from "./pages/TeamPage";
+import GithubSettingsPage from "./pages/GithubSettingsPage";
 
 function FullScreenLoader() {
   return (
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="apps/new" element={<NewAppPage />} />
           <Route path="apps/:appId" element={<AppDetailPage />} />
           <Route path="team" element={<TeamPage />} />
+          <Route path="settings/github" element={<GithubSettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

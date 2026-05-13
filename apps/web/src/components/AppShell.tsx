@@ -6,6 +6,7 @@ import { cn } from "../lib/cn";
 const navItems = [
   { to: "/", label: "Apps", end: true },
   { to: "/team", label: "Team" },
+  { to: "/settings/github", label: "GitHub" },
 ];
 
 export default function AppShell() {

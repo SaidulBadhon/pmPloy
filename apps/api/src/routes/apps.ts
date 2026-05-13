@@ -34,11 +34,20 @@ function applicationView(
     name: app.name,
     slug: app.slug,
     sourceType: app.sourceType,
-    cwd: app.cwd,
+    cwd: app.cwd ?? "",
     script: app.script,
     interpreter: app.interpreter ?? "",
     instances: app.instances ?? 1,
     execMode: app.execMode,
+    github: app.github
+      ? {
+          installationId: app.github.installationId,
+          repo: app.github.repo,
+          branch: app.github.branch,
+          rootDir: app.github.rootDir ?? "",
+          buildCommand: app.github.buildCommand ?? "",
+        }
+      : null,
     port: app.port ?? null,
     status: app.status,
     pm2Name: app.pm2Name,
@@ -93,12 +102,13 @@ route.post(
       teamId,
       name: input.name,
       slug,
-      sourceType: "local",
-      cwd: input.cwd,
+      sourceType: input.sourceType,
+      cwd: input.sourceType === "local" ? input.cwd : "",
       script: input.script,
       interpreter: input.interpreter || "",
       instances: input.instances,
       execMode: input.execMode,
+      github: input.sourceType === "github" ? input.github : undefined,
       port,
       status: "created",
       pm2Name: pm2NameForApp(String(_id)),
@@ -140,6 +150,9 @@ route.patch(
     if (patch.interpreter !== undefined) app.interpreter = patch.interpreter;
     if (patch.instances !== undefined) app.instances = patch.instances;
     if (patch.execMode !== undefined) app.execMode = patch.execMode;
+    if (patch.github !== undefined && app.sourceType === "github" && app.github) {
+      Object.assign(app.github, patch.github);
+    }
     await app.save();
     const pm2 = await safeDescribe(app.pm2Name);
     return c.json(applicationView(app, pm2));
@@ -167,6 +180,16 @@ route.post(
   async (c) => {
     const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
+    if (!app.cwd) {
+      return c.json(
+        {
+          error: "not_deployed",
+          message:
+            "this app has no working directory yet; deploy it from GitHub first",
+        },
+        409,
+      );
+    }
     try {
       app.status = "deploying";
       await app.save();

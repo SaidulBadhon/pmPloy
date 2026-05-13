@@ -1,13 +1,22 @@
 import { Schema, model, Types, type InferSchemaType, type Model } from "mongoose";
 
+const githubSourceSchema = new Schema(
+  {
+    installationId: { type: Number, required: true },
+    repo: { type: String, required: true }, // "owner/name"
+    branch: { type: String, required: true, default: "main" },
+    rootDir: { type: String, default: "" }, // optional sub-directory
+    buildCommand: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
 const applicationSchema = new Schema(
   {
     teamId: { type: Schema.Types.ObjectId, ref: "Team", required: true, index: true },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, lowercase: true, trim: true },
 
-    // Source description. For milestone 3 only "local" is wired up;
-    // "github" lands in a later milestone.
     sourceType: {
       type: String,
       enum: ["local", "github"],
@@ -15,12 +24,10 @@ const applicationSchema = new Schema(
       required: true,
     },
     // For sourceType === "local": absolute path to the working directory.
-    cwd: { type: String, required: true },
-    // Command to launch; mapped to PM2's `script` (with shell-style args).
+    // For sourceType === "github": filled in once the first deployment lands.
+    cwd: { type: String, default: "" },
     script: { type: String, required: true },
-    // Optional interpreter (e.g. "bun", "node", "python"). Empty = let pm2 infer.
     interpreter: { type: String, default: "" },
-    // PM2 cluster vs fork. "max" / number for cluster, omit for fork.
     instances: { type: Number, default: 1 },
     execMode: {
       type: String,
@@ -29,7 +36,8 @@ const applicationSchema = new Schema(
       required: true,
     },
 
-    // Port allocated to this app (used later for reverse-proxy mapping).
+    github: { type: githubSourceSchema, required: false },
+
     port: { type: Number, required: false },
 
     status: {
@@ -38,7 +46,6 @@ const applicationSchema = new Schema(
       default: "created",
       required: true,
     },
-    // PM2 process name = `pmploy:<appId>` — denormalized for convenience.
     pm2Name: { type: String, required: true },
   },
   { timestamps: true },

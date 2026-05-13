@@ -96,20 +96,41 @@ export type TeamMember = z.infer<typeof TeamMemberSchema>;
 export const ExecModeSchema = z.enum(["fork", "cluster"]);
 export type ExecMode = z.infer<typeof ExecModeSchema>;
 
-export const CreateApplicationInputSchema = z.object({
+export const GithubSourceInputSchema = z.object({
+  installationId: z.number().int().positive(),
+  repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/, "expected owner/name"),
+  branch: z.string().trim().min(1).max(120),
+  rootDir: z.string().trim().max(200).optional().default(""),
+  buildCommand: z.string().trim().max(400).optional().default(""),
+});
+export type GithubSourceInput = z.infer<typeof GithubSourceInputSchema>;
+
+const baseAppInput = z.object({
   name: z.string().trim().min(1).max(80),
-  sourceType: z.literal("local").default("local"),
-  cwd: z.string().trim().min(1),
   script: z.string().trim().min(1),
   interpreter: z.string().trim().max(40).optional().default(""),
   instances: z.number().int().min(1).max(64).default(1),
   execMode: ExecModeSchema.default("fork"),
 });
+
+export const CreateApplicationInputSchema = z.discriminatedUnion("sourceType", [
+  baseAppInput.extend({
+    sourceType: z.literal("local"),
+    cwd: z.string().trim().min(1),
+  }),
+  baseAppInput.extend({
+    sourceType: z.literal("github"),
+    github: GithubSourceInputSchema,
+  }),
+]);
 export type CreateApplicationInput = z.infer<typeof CreateApplicationInputSchema>;
 
-export const UpdateApplicationInputSchema = CreateApplicationInputSchema.partial().omit({
-  sourceType: true,
-});
+export const UpdateApplicationInputSchema = baseAppInput
+  .extend({
+    cwd: z.string().trim().min(1).optional(),
+    github: GithubSourceInputSchema.partial().optional(),
+  })
+  .partial();
 export type UpdateApplicationInput = z.infer<typeof UpdateApplicationInputSchema>;
 
 export const Pm2StatusSchema = z.enum([
@@ -134,6 +155,15 @@ export const Pm2InfoSchema = z.object({
 });
 export type Pm2Info = z.infer<typeof Pm2InfoSchema>;
 
+export const GithubSourceSchema = z.object({
+  installationId: z.number(),
+  repo: z.string(),
+  branch: z.string(),
+  rootDir: z.string(),
+  buildCommand: z.string(),
+});
+export type GithubSource = z.infer<typeof GithubSourceSchema>;
+
 export const PublicApplicationSchema = z.object({
   id: z.string(),
   teamId: z.string(),
@@ -145,6 +175,7 @@ export const PublicApplicationSchema = z.object({
   interpreter: z.string(),
   instances: z.number(),
   execMode: ExecModeSchema,
+  github: GithubSourceSchema.nullable(),
   port: z.number().nullable(),
   status: AppStatusSchema,
   pm2Name: z.string(),
@@ -153,3 +184,37 @@ export const PublicApplicationSchema = z.object({
   updatedAt: z.string(),
 });
 export type PublicApplication = z.infer<typeof PublicApplicationSchema>;
+
+// --- GitHub ---
+
+export const GithubInstallationSchema = z.object({
+  id: z.string(),
+  installationId: z.number(),
+  accountLogin: z.string(),
+  accountType: z.enum(["User", "Organization"]),
+  avatarUrl: z.string(),
+});
+export type GithubInstallation = z.infer<typeof GithubInstallationSchema>;
+
+export const GithubRepoSchema = z.object({
+  id: z.number(),
+  fullName: z.string(),
+  name: z.string(),
+  owner: z.string(),
+  defaultBranch: z.string(),
+  private: z.boolean(),
+  description: z.string().nullable(),
+});
+export type GithubRepo = z.infer<typeof GithubRepoSchema>;
+
+export const GithubBranchSchema = z.object({
+  name: z.string(),
+  sha: z.string(),
+  protected: z.boolean(),
+});
+export type GithubBranch = z.infer<typeof GithubBranchSchema>;
+
+export const ConnectInstallationInputSchema = z.object({
+  installationId: z.number().int().positive(),
+});
+export type ConnectInstallationInput = z.infer<typeof ConnectInstallationInputSchema>;
