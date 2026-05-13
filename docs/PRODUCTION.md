@@ -249,7 +249,16 @@ ENV_ENCRYPTION_KEY=<keep the generated base64 value — losing this loses your e
 
 CADDY_ADMIN_URL=http://127.0.0.1:2019
 
-# GitHub fields are filled in section 6
+# Public origin of this pmPloy instance. Required so the GitHub App manifest
+# flow (and any other code that builds absolute URLs) gets the right host/scheme
+# behind the reverse proxy. Without this, the API falls back to its upstream
+# Bun address (e.g. http://127.0.0.1:4000), which GitHub will reject.
+PUBLIC_ORIGIN=https://pmploy.example.com
+
+# GitHub fields are OPTIONAL: a platform admin can register a GitHub App from
+# the UI (Settings → GitHub App), which stores the credentials in MongoDB
+# (encrypted with ENV_ENCRYPTION_KEY). Fill these in only if you already
+# created an App manually and want to wire it up via env instead.
 GITHUB_APP_ID=
 GITHUB_APP_SLUG=
 GITHUB_APP_PRIVATE_KEY=
@@ -282,6 +291,20 @@ Serving the static bundle through Caddy is covered in section 8.
 
 > Skip this section if you only deploy local-script apps. Real GitHub deploys
 > need the App.
+
+**Recommended: register from the UI.** Once the panel is up (section 8 and
+later), log in as the platform admin and visit **Settings → GitHub App**
+(`/settings/platform/github`). Click **Register GitHub App** — pmPloy uses
+GitHub's [App Manifest flow](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest)
+to create the App with the correct webhook URL, permissions, and events, then
+stores the credentials in MongoDB (private key, webhook secret, and client
+secret are AES-256-GCM-sealed with `ENV_ENCRYPTION_KEY`). No `.env` editing,
+no restart. **Requires `PUBLIC_ORIGIN` to be set and the panel to be reachable
+over HTTPS** — GitHub rejects non-HTTPS manifest URLs outside of `localhost`.
+
+**Alternative: manual registration.** If you prefer to create the App by hand
+and configure it via `.env`, follow the steps below. The API loads from `.env`
+when no DB-stored config exists.
 
 1. Go to <https://github.com/settings/apps/new> (or your org's `Settings → Developer settings → GitHub Apps → New GitHub App`).
 2. Fill in the form:
@@ -409,24 +432,26 @@ Caddy fronts the entire system: it terminates TLS for the pmPloy panel itself
 pmploy.example.com {
     encode zstd gzip
 
-    # Serve the built React SPA
-    root * /home/pmploy/pmPloy/apps/web/dist
-    file_server
-
-    # Proxy API + webhooks to the Bun process
-    @api path /auth/* /teams/* /apps/* /caddy/* /env/* /github/* /webhooks/* /health /
-    handle @api {
+    # Proxy /api/* (and /health) to the Bun process, stripping the prefix
+    # before forwarding. The web client always prefixes API calls with /api.
+    handle /api/* {
+        uri strip_prefix /api
         reverse_proxy 127.0.0.1:4000 {
             flush_interval -1     # important for SSE log streaming
         }
     }
 
-    # SPA fallback: anything else returns index.html so client-side routing works
-    @notfile {
-        not file
-        not path /auth/* /teams/* /apps/* /caddy/* /env/* /github/* /webhooks/* /health
+    handle /health {
+        reverse_proxy 127.0.0.1:4000
     }
-    rewrite @notfile /index.html
+
+    # SPA: serve dist/ for everything else, with index.html fallback for
+    # client-side routes like /settings/platform/github.
+    handle {
+        root * /home/pmploy/pmPloy/apps/web/dist
+        try_files {path} /index.html
+        file_server
+    }
 }
 ```
 

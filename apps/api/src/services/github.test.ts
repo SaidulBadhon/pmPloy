@@ -1,5 +1,13 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, mock } from "bun:test";
 import { sign } from "@octokit/webhooks-methods";
+
+// Mock the githubAppConfig module before importing github.ts so that
+// getGithubAppConfig() returns null without attempting a MongoDB connection.
+mock.module("./githubAppConfig.ts", () => ({
+  getGithubAppConfig: async () => null,
+  _resetGithubAppConfigCache: () => {},
+}));
+
 import {
   verifyWebhookSignatureWith,
   isGithubConfigured,
@@ -16,9 +24,7 @@ describe("verifyWebhookSignatureWith", () => {
 
   it("rejects a tampered payload", async () => {
     const sig = await sign(secret, payload);
-    expect(
-      await verifyWebhookSignatureWith(secret, payload + "x", sig),
-    ).toBe(false);
+    expect(await verifyWebhookSignatureWith(secret, payload + "x", sig)).toBe(false);
   });
 
   it("rejects when secret missing", async () => {
@@ -32,8 +38,7 @@ describe("verifyWebhookSignatureWith", () => {
 });
 
 describe("isGithubConfigured", () => {
-  it("returns false when env vars are unset (default test env)", () => {
-    // env.ts reads at import time; in tests we haven't set GITHUB_APP_ID etc.
-    expect(isGithubConfigured()).toBe(false);
+  it("returns false when neither DB nor env has config (default test env)", async () => {
+    expect(await isGithubConfigured()).toBe(false);
   });
 });

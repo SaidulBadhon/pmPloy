@@ -219,6 +219,24 @@ export const ConnectInstallationInputSchema = z.object({
 });
 export type ConnectInstallationInput = z.infer<typeof ConnectInstallationInputSchema>;
 
+// --- GitHub App (platform-level) ---
+
+export const GithubAppStatusSchema = z.object({
+  configured: z.boolean(),
+  appId: z.string().nullable(),
+  slug: z.string().nullable(),
+  htmlUrl: z.string().nullable(),
+  source: z.enum(["database", "environment", "none"]),
+});
+export type GithubAppStatus = z.infer<typeof GithubAppStatusSchema>;
+
+export const RegisterManifestResponseSchema = z.object({
+  action: z.string().url(),       // where the form should POST (github.com/settings/apps/new)
+  state: z.string(),              // signed state token (goes in the URL query)
+  manifest: z.string(),           // JSON-stringified manifest, posted as a form field
+});
+export type RegisterManifestResponse = z.infer<typeof RegisterManifestResponseSchema>;
+
 // --- Deployments ---
 
 export const PublicDeploymentSchema = z.object({

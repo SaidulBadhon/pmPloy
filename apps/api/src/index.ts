@@ -14,6 +14,7 @@ import envRoutes from "./routes/env.ts";
 import githubRoutes from "./routes/github.ts";
 import githubCallbackRoutes from "./routes/githubCallback.ts";
 import platformRoutes from "./routes/platform.ts";
+import platformGithubRoutes from "./routes/platformGithub.ts";
 import webhookRoutes from "./routes/webhooks.ts";
 
 const app = new Hono();
@@ -49,6 +50,7 @@ app.route("/", envRoutes);
 app.route("/", githubRoutes);
 app.route("/", githubCallbackRoutes);
 app.route("/", platformRoutes);
+app.route("/", platformGithubRoutes);
 app.route("/", webhookRoutes);
 
 app.onError((err, c) => {
