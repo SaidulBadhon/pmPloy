@@ -7,6 +7,7 @@ import {
   type PublicApplication,
 } from "@pmploy/shared";
 import { Application, type ApplicationDoc } from "../models/Application.ts";
+import { Domain } from "../models/Domain.ts";
 import { requireAuth, requireTeamRole, type AuthVars } from "../auth/rbac.ts";
 import { slugify, randomSuffix } from "../lib/slug.ts";
 import { allocatePort } from "../services/ports.ts";
@@ -19,6 +20,7 @@ import {
   deleteProcess,
   type Pm2Info,
 } from "../services/pm2.ts";
+import { caddy } from "../services/caddy.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
 
@@ -159,13 +161,18 @@ route.patch(
   },
 );
 
-// Delete (also tears down the PM2 process).
+// Delete (also tears down the PM2 process and Caddy routes).
 route.delete(
   "/teams/:teamId/apps/:appId",
   requireTeamRole("admin"),
   async (c) => {
     const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
+    const domains = await Domain.find({ appId: app._id });
+    for (const d of domains) {
+      await caddy.removeDomain(d.host).catch(() => undefined);
+      await d.deleteOne();
+    }
     await deleteProcess(app.pm2Name).catch(() => undefined);
     await app.deleteOne();
     return c.json({ ok: true });

@@ -256,3 +256,38 @@ export const DeployLogEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("done") }),
 ]);
 export type DeployLogEvent = z.infer<typeof DeployLogEventSchema>;
+
+// --- Domains ---
+
+// RFC 1035 hostname-ish: letters, digits, dot, hyphen. No protocol, no slash.
+const HOST_REGEX = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+export const SslStatusSchema = z.enum(["pending", "active", "error", "unknown"]);
+export type SslStatus = z.infer<typeof SslStatusSchema>;
+
+export const AttachDomainInputSchema = z.object({
+  host: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(253)
+    .regex(HOST_REGEX, "invalid hostname"),
+});
+export type AttachDomainInput = z.infer<typeof AttachDomainInputSchema>;
+
+export const PublicDomainSchema = z.object({
+  id: z.string(),
+  appId: z.string(),
+  teamId: z.string(),
+  host: z.string(),
+  sslStatus: SslStatusSchema,
+  lastError: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PublicDomain = z.infer<typeof PublicDomainSchema>;
+
+export const CaddyStatusSchema = z.object({
+  reachable: z.boolean(),
+});
+export type CaddyStatus = z.infer<typeof CaddyStatusSchema>;

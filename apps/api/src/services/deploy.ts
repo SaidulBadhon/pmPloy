@@ -21,6 +21,8 @@ import {
 import { runShell, runStreaming } from "./spawn.ts";
 import { getHeadCommit, getInstallationToken } from "./github.ts";
 import { deployBus, deployTopic } from "./pubsub.ts";
+import { caddy } from "./caddy.ts";
+import { Domain } from "../models/Domain.ts";
 
 const KEEP_DEPLOYMENTS = 3;
 
@@ -94,7 +96,8 @@ async function runDeploy(deploymentId: string): Promise<void> {
     app.status = "running";
     await app.save();
 
-    // Best-effort: prune older deploy dirs for this app.
+    // Best-effort: refresh Caddy routes (port may have changed) and prune.
+    await resyncDomains(String(app._id), app.port ?? null, ctx).catch(() => undefined);
     await pruneOldDeployDirs(String(app._id)).catch(() => undefined);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -245,6 +248,30 @@ function detectInstallCommand(dir: string): string {
   if (existsSync(path.join(dir, "package-lock.json"))) return "npm ci";
   if (existsSync(path.join(dir, "package.json"))) return "npm install";
   return "true"; // no-op for non-Node projects
+}
+
+async function resyncDomains(
+  appId: string,
+  port: number | null,
+  ctx: LogContext,
+): Promise<void> {
+  if (!port) return;
+  const domains = await Domain.find({ appId: new Types.ObjectId(appId) });
+  if (domains.length === 0) return;
+  for (const d of domains) {
+    try {
+      await caddy.upsertDomain(d.host, port);
+      d.sslStatus = "active";
+      d.lastError = "";
+      await d.save();
+      await ctx.log(`▶ caddy: ${d.host} -> 127.0.0.1:${port}`);
+    } catch (err) {
+      d.sslStatus = "error";
+      d.lastError = err instanceof Error ? err.message : String(err);
+      await d.save();
+      await ctx.log(`✗ caddy sync failed for ${d.host}: ${d.lastError}`);
+    }
+  }
 }
 
 async function pruneOldDeployDirs(appId: string): Promise<void> {

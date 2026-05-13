@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { Button } from "../components/ui/Button";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
 import { StatusPill } from "../components/ui/StatusPill";
+import { DomainsCard } from "../components/DomainsCard";
 import { bytes, ms } from "../lib/format";
 
 const DEPLOY_STATUS_STYLE: Record<string, string> = {
@@ -213,6 +214,15 @@ export default function AppDetailPage() {
           </dl>
         </Card>
       </div>
+
+      {currentTeamId && (
+        <DomainsCard
+          teamId={currentTeamId}
+          appId={app.id}
+          canManage={!!canManage}
+          canDelete={!!canDelete}
+        />
+      )}
 
       <Card>
         <CardTitle>Deployments</CardTitle>
