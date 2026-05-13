@@ -13,6 +13,7 @@ import SignupPage from "./pages/SignupPage";
 import AppsListPage from "./pages/AppsListPage";
 import NewAppPage from "./pages/NewAppPage";
 import AppDetailPage from "./pages/AppDetailPage";
+import DeploymentDetailPage from "./pages/DeploymentDetailPage";
 import TeamPage from "./pages/TeamPage";
 import GithubSettingsPage from "./pages/GithubSettingsPage";
 
@@ -76,6 +77,10 @@ export default function App() {
           <Route index element={<AppsListPage />} />
           <Route path="apps/new" element={<NewAppPage />} />
           <Route path="apps/:appId" element={<AppDetailPage />} />
+          <Route
+            path="apps/:appId/deployments/:deploymentId"
+            element={<DeploymentDetailPage />}
+          />
           <Route path="team" element={<TeamPage />} />
           <Route path="settings/github" element={<GithubSettingsPage />} />
         </Route>

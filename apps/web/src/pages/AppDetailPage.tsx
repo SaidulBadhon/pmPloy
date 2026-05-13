@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import type { PublicApplication } from "@pmploy/shared";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import type { PublicApplication, PublicDeployment } from "@pmploy/shared";
 import { useAuth } from "../stores/auth";
 import { api } from "../lib/api";
 import { Button } from "../components/ui/Button";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
 import { StatusPill } from "../components/ui/StatusPill";
 import { bytes, ms } from "../lib/format";
+
+const DEPLOY_STATUS_STYLE: Record<string, string> = {
+  queued: "text-neutral-400",
+  building: "text-amber-300",
+  live: "text-emerald-300",
+  failed: "text-red-300",
+  cancelled: "text-neutral-500",
+};
 
 export default function AppDetailPage() {
   const { appId } = useParams<{ appId: string }>();
@@ -17,14 +25,21 @@ export default function AppDetailPage() {
   const canDelete = team?.role === "owner" || team?.role === "admin";
 
   const [app, setApp] = useState<PublicApplication | null>(null);
+  const [deployments, setDeployments] = useState<PublicDeployment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!currentTeamId || !appId) return;
     try {
-      const a = await api<PublicApplication>(`/teams/${currentTeamId}/apps/${appId}`);
+      const [a, ds] = await Promise.all([
+        api<PublicApplication>(`/teams/${currentTeamId}/apps/${appId}`),
+        api<{ deployments: PublicDeployment[] }>(
+          `/teams/${currentTeamId}/apps/${appId}/deployments`,
+        ),
+      ]);
       setApp(a);
+      setDeployments(ds.deployments);
     } catch (err) {
       setError(err instanceof Error ? err.message : "load failed");
     }
@@ -70,6 +85,23 @@ export default function AppDetailPage() {
     }
   }
 
+  async function onDeploy() {
+    if (!currentTeamId || !appId) return;
+    setBusy("deploy");
+    setError(null);
+    try {
+      const dep = await api<PublicDeployment>(
+        `/teams/${currentTeamId}/apps/${appId}/deploy`,
+        { method: "POST", body: {} },
+      );
+      navigate(`/apps/${appId}/deployments/${dep.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "deploy failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!app) {
     return (
       <div className="space-y-2">
@@ -86,6 +118,15 @@ export default function AppDetailPage() {
         <StatusPill status={app.status} />
         <span className="font-mono text-xs text-neutral-500">{app.pm2Name}</span>
         <div className="ml-auto flex gap-2">
+          {canManage && app.sourceType === "github" && (
+            <Button
+              size="sm"
+              disabled={busy !== null}
+              onClick={onDeploy}
+            >
+              {busy === "deploy" ? "Deploying…" : "Deploy"}
+            </Button>
+          )}
           {canManage && (
             <>
               <Button
@@ -152,11 +193,13 @@ export default function AppDetailPage() {
         <Card>
           <CardTitle>Configuration</CardTitle>
           <CardDescription className="mt-1">
-            Edit via the API; UI inline edit lands later.
+            {app.sourceType === "github"
+              ? `GitHub: ${app.github?.repo}@${app.github?.branch}`
+              : "Edit via the API; UI inline edit lands later."}
           </CardDescription>
           <dl className="mt-4 grid grid-cols-[8rem,1fr] gap-y-2 text-sm">
             <dt className="text-neutral-500">cwd</dt>
-            <dd className="break-all font-mono">{app.cwd}</dd>
+            <dd className="break-all font-mono">{app.cwd || "—"}</dd>
             <dt className="text-neutral-500">script</dt>
             <dd className="break-all font-mono">{app.script}</dd>
             <dt className="text-neutral-500">interpreter</dt>
@@ -170,6 +213,48 @@ export default function AppDetailPage() {
           </dl>
         </Card>
       </div>
+
+      <Card>
+        <CardTitle>Deployments</CardTitle>
+        <CardDescription className="mt-1">
+          {deployments.length === 0
+            ? "No deployments yet."
+            : "Most recent first."}
+        </CardDescription>
+        {deployments.length > 0 && (
+          <ul className="mt-4 divide-y divide-neutral-800">
+            {deployments.map((d) => (
+              <li key={d.id} className="py-3">
+                <Link
+                  to={`/apps/${app.id}/deployments/${d.id}`}
+                  className="block hover:opacity-80"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`font-mono text-xs uppercase tracking-wider ${
+                        DEPLOY_STATUS_STYLE[d.status] ?? "text-neutral-400"
+                      }`}
+                    >
+                      {d.status}
+                    </span>
+                    <span className="font-mono text-xs text-neutral-500">
+                      {d.commitSha ? d.commitSha.slice(0, 7) : "—"}
+                    </span>
+                    <span className="truncate text-sm">
+                      {d.commitMessage || (
+                        <span className="text-neutral-500">no commit message</span>
+                      )}
+                    </span>
+                    <span className="ml-auto text-xs text-neutral-500">
+                      {d.triggeredBy} · {new Date(d.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

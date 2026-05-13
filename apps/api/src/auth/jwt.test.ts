@@ -13,7 +13,11 @@ describe("jwt", () => {
 
   it("returns null for a tampered token", async () => {
     const token = await issueToken({ id: "abc", email: "a@b.com" });
-    const broken = token.slice(0, -2) + "xx";
+    // Flip a character in the payload so the signature can no longer verify.
+    const parts = token.split(".");
+    const mid = parts[1]!;
+    const flipped = (mid[0] === "A" ? "B" : "A") + mid.slice(1);
+    const broken = `${parts[0]}.${flipped}.${parts[2]}`;
     expect(await readToken(broken)).toBeNull();
   });
 });

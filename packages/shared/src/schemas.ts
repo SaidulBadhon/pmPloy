@@ -218,3 +218,41 @@ export const ConnectInstallationInputSchema = z.object({
   installationId: z.number().int().positive(),
 });
 export type ConnectInstallationInput = z.infer<typeof ConnectInstallationInputSchema>;
+
+// --- Deployments ---
+
+export const PublicDeploymentSchema = z.object({
+  id: z.string(),
+  appId: z.string(),
+  teamId: z.string(),
+  status: DeploymentStatusSchema,
+  triggeredBy: z.enum(["webhook", "manual", "user"]),
+  commitSha: z.string(),
+  commitMessage: z.string(),
+  branch: z.string(),
+  errorMessage: z.string(),
+  workdir: z.string(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PublicDeployment = z.infer<typeof PublicDeploymentSchema>;
+
+export const PublicDeploymentWithLogsSchema = PublicDeploymentSchema.extend({
+  logs: z.array(z.string()),
+});
+export type PublicDeploymentWithLogs = z.infer<typeof PublicDeploymentWithLogsSchema>;
+
+export const TriggerDeployInputSchema = z.object({
+  commitSha: z.string().trim().optional(),
+  branch: z.string().trim().optional(),
+});
+export type TriggerDeployInput = z.infer<typeof TriggerDeployInputSchema>;
+
+export const DeployLogEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("log"), line: z.string() }),
+  z.object({ type: z.literal("status"), status: z.string() }),
+  z.object({ type: z.literal("done") }),
+]);
+export type DeployLogEvent = z.infer<typeof DeployLogEventSchema>;

@@ -105,6 +105,44 @@ export type GithubBranch = {
   protected: boolean;
 };
 
+export type HeadCommit = {
+  sha: string;
+  message: string;
+  author: string;
+};
+
+/** Resolve the current HEAD commit of a ref (branch name / sha / tag). */
+export async function getHeadCommit(
+  installationId: number,
+  owner: string,
+  repo: string,
+  ref: string,
+): Promise<HeadCommit> {
+  const app = githubApp();
+  const installation = await app.getInstallationOctokit(installationId);
+  const { data } = await installation.request(
+    "GET /repos/{owner}/{repo}/commits/{ref}",
+    { owner, repo, ref },
+  );
+  return {
+    sha: data.sha,
+    message: data.commit.message,
+    author: data.commit.author?.name ?? "",
+  };
+}
+
+/** Fetch an installation access token (for git clone over HTTPS). */
+export async function getInstallationToken(
+  installationId: number,
+): Promise<string> {
+  const app = githubApp();
+  const result = (await app.octokit.auth({
+    type: "installation",
+    installationId,
+  })) as { token: string };
+  return result.token;
+}
+
 /** List branches for a repo accessible to the installation. */
 export async function listRepoBranches(
   installationId: number,
