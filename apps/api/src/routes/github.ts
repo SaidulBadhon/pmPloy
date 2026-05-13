@@ -32,17 +32,17 @@ function installationView(doc: GithubInstallationDoc): PublicGithubInstallation 
 }
 
 // Config probe so the UI can show a setup hint when the GitHub App isn't set up.
-route.get("/teams/:teamId/github/status", requireTeamRole("viewer"), (c) =>
-  c.json({ configured: isGithubConfigured() }),
+route.get("/teams/:teamId/github/status", requireTeamRole("viewer"), async (c) =>
+  c.json({ configured: await isGithubConfigured() }),
 );
 
 // Returns the URL the user should visit to install the GitHub App on their org.
-route.get("/teams/:teamId/github/install-url", requireTeamRole("admin"), (c) => {
-  if (!isGithubConfigured()) {
+route.get("/teams/:teamId/github/install-url", requireTeamRole("admin"), async (c) => {
+  if (!(await isGithubConfigured())) {
     return c.json({ error: "github_not_configured" }, 503);
   }
   try {
-    const url = installUrl(c.req.param("teamId"));
+    const url = await installUrl(c.req.param("teamId"));
     return c.json({ url });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 500);
@@ -72,7 +72,7 @@ route.post(
   requireTeamRole("admin"),
   zValidator("json", ConnectInstallationInputSchema),
   async (c) => {
-    if (!isGithubConfigured()) {
+    if (!(await isGithubConfigured())) {
       return c.json({ error: "github_not_configured" }, 503);
     }
     const teamId = c.req.param("teamId");

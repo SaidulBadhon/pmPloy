@@ -20,7 +20,7 @@ const route = new Hono<{ Variables: AuthVars }>();
  * We require the caller to be authenticated and be at least admin on the team.
  */
 route.get("/github/callback", requireAuth, async (c) => {
-  if (!isGithubConfigured()) {
+  if (!(await isGithubConfigured())) {
     return c.json({ error: "github_not_configured" }, 503);
   }
   const installationIdRaw = c.req.query("installation_id");
