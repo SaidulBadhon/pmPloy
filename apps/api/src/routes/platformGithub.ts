@@ -60,7 +60,7 @@ route.post("/platform/github/manifest", requirePlatformAdmin, async (c) => {
     url: origin,
     hook_attributes: { url: `${origin}/api/webhooks/github`, active: true },
     redirect_url: `${origin}/api/platform/github/manifest/callback`,
-    setup_url: `${origin}/settings/platform/github`,
+    setup_url: `${origin}/api/github/callback`,
     callback_urls: [`${origin}/api/github/callback`],
     public: false,
     default_permissions: {
