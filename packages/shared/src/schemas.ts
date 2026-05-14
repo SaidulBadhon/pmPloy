@@ -336,7 +336,7 @@ export type EnvVarInput = z.infer<typeof EnvVarInputSchema>;
 export const PublicEnvVarSchema = z.object({
   id: z.string(),
   key: z.string(),
-  // values are write-only; never echoed back to clients.
+  serviceName: z.string(),
   updatedAt: z.string(),
   createdAt: z.string(),
 });
