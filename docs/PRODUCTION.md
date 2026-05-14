@@ -794,5 +794,18 @@ Run through this list once before pointing real users at the box.
 
 ---
 
+## Multi-Process Apps
+
+If your repository contains an `ecosystem.config.{cjs,js,json}` in the build directory, pmPloy treats it as a multi-process app. Each app declared in the file is started as a separate PM2 process named `pmploy:<appId>:<serviceName>`. Implications:
+
+- Outside pmPloy, `pm2 list` will show the namespaced names — `pmploy:64aabb...:web` rather than `web`. This is intentional to prevent collisions between apps.
+- Service names must match `/^[A-Za-z0-9._-]+$/`. Whitespace, colons, and other PM2-unfriendly characters are rejected at deploy time.
+- Per-service ports default to `process.env.PORT` from the ecosystem file. You can override the port for any service in the pmPloy UI; the override persists across deploys.
+- When attaching a domain, you can pin it to a specific service. Leave blank to route to the designated **primary** service.
+- The `Start` button in the pmPloy UI is a coarse fallback that only re-runs PM2's last known config per service. For changes to the ecosystem file, redeploy.
+- PM2 log rotation is not managed by pmPloy. If you rely on long-running services, configure `pm2 install pm2-logrotate` or external logrotate.
+
+---
+
 If anything in this guide is ambiguous on your distro/setup, please open an
 issue — patches welcome.
