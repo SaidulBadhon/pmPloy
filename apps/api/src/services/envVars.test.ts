@@ -1,12 +1,20 @@
-import { describe, it, expect, beforeEach, afterAll } from "bun:test";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "bun:test";
 import mongoose, { Types } from "mongoose";
 import { EnvVar } from "../models/EnvVar.ts";
-import { seal } from "./crypto.ts";
+import { seal, isEncryptionConfigured } from "./crypto.ts";
 import { getDecryptedEnv } from "./envVars.ts";
 
 describe("getDecryptedEnv merge order", () => {
   const appId = new Types.ObjectId();
   const teamId = new Types.ObjectId();
+
+  beforeAll(() => {
+    if (!isEncryptionConfigured()) {
+      throw new Error(
+        "ENV_ENCRYPTION_KEY not set — these tests rely on .env.test (auto-loaded by Bun when NODE_ENV=test). Run `bun test` from apps/api, not a parent dir.",
+      );
+    }
+  });
 
   beforeEach(async () => {
     if (mongoose.connection.readyState === 0) {
