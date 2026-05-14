@@ -5,14 +5,20 @@ import { Button } from "./ui/Button";
 import { Input, Label } from "./ui/Input";
 import { Card, CardDescription, CardTitle } from "./ui/Card";
 
+export type EnvScope =
+  | { type: "app" }
+  | { type: "service"; serviceName: string };
+
 export function EnvVarsCard({
   teamId,
   appId,
   canManage,
+  scope = { type: "app" },
 }: {
   teamId: string;
   appId: string;
   canManage: boolean;
+  scope?: EnvScope;
 }) {
   const [vars, setVars] = useState<PublicEnvVar[] | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -21,11 +27,18 @@ export function EnvVarsCard({
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
 
+  const basePath =
+    scope.type === "app"
+      ? `/teams/${teamId}/apps/${appId}/env`
+      : `/teams/${teamId}/apps/${appId}/services/${encodeURIComponent(
+          scope.serviceName,
+        )}/env`;
+
   async function load() {
     setError(null);
     try {
       const [v, s] = await Promise.all([
-        api<{ vars: PublicEnvVar[] }>(`/teams/${teamId}/apps/${appId}/env`),
+        api<{ vars: PublicEnvVar[] }>(basePath),
         api<{ configured: boolean }>(`/env/status`),
       ]);
       setVars(v.vars);
@@ -39,7 +52,7 @@ export function EnvVarsCard({
     setVars(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, appId]);
+  }, [teamId, appId, scope.type, scope.type === "service" ? scope.serviceName : ""]);
 
   async function onUpsert(e: FormEvent) {
     e.preventDefault();
@@ -47,10 +60,10 @@ export function EnvVarsCard({
     setBusy("upsert");
     setError(null);
     try {
-      await api(
-        `/teams/${teamId}/apps/${appId}/env/${encodeURIComponent(key)}`,
-        { method: "PUT", body: { value } },
-      );
+      await api(`${basePath}/${encodeURIComponent(key)}`, {
+        method: "PUT",
+        body: { value },
+      });
       setKey("");
       setValue("");
       await load();
@@ -65,10 +78,7 @@ export function EnvVarsCard({
     if (!confirm(`Delete ${k}?`)) return;
     setBusy(k);
     try {
-      await api(
-        `/teams/${teamId}/apps/${appId}/env/${encodeURIComponent(k)}`,
-        { method: "DELETE" },
-      );
+      await api(`${basePath}/${encodeURIComponent(k)}`, { method: "DELETE" });
       setVars((cur) => (cur ? cur.filter((v) => v.key !== k) : cur));
     } catch (err) {
       setError(err instanceof Error ? err.message : "delete failed");
@@ -77,13 +87,19 @@ export function EnvVarsCard({
     }
   }
 
+  const title =
+    scope.type === "app"
+      ? "Environment variables"
+      : "Service environment overrides";
+  const description =
+    scope.type === "app"
+      ? "Values are encrypted at rest with AES-256-GCM and injected into every service on start."
+      : "Overrides for this service. These take precedence over the app-level shared variables.";
+
   return (
     <Card>
-      <CardTitle>Environment variables</CardTitle>
-      <CardDescription className="mt-1">
-        Values are encrypted at rest with AES-256-GCM and injected into the PM2
-        process on start.
-      </CardDescription>
+      <CardTitle>{title}</CardTitle>
+      <CardDescription className="mt-1">{description}</CardDescription>
       {configured === false && (
         <p className="mt-3 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-xs text-amber-200">
           Set <code>ENV_ENCRYPTION_KEY</code> to a 32-byte base64 value (e.g.
@@ -96,7 +112,9 @@ export function EnvVarsCard({
       <ul className="mt-4 divide-y divide-neutral-800">
         {vars === null && <li className="py-3 text-neutral-500">Loading…</li>}
         {vars && vars.length === 0 && (
-          <li className="py-3 text-neutral-500">No variables yet.</li>
+          <li className="py-3 text-neutral-500">
+            {scope.type === "app" ? "No variables yet." : "No overrides yet."}
+          </li>
         )}
         {vars?.map((v) => (
           <li key={v.id} className="flex items-center gap-3 py-3">
@@ -119,9 +137,9 @@ export function EnvVarsCard({
       {canManage && configured !== false && (
         <form onSubmit={onUpsert} className="mt-6 grid grid-cols-[1fr,2fr,auto] gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="env-key">Key</Label>
+            <Label htmlFor={`env-key-${scope.type}`}>Key</Label>
             <Input
-              id="env-key"
+              id={`env-key-${scope.type}`}
               value={key}
               onChange={(e) => setKey(e.target.value.toUpperCase())}
               placeholder="DATABASE_URL"
@@ -129,9 +147,9 @@ export function EnvVarsCard({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="env-val">Value</Label>
+            <Label htmlFor={`env-val-${scope.type}`}>Value</Label>
             <Input
-              id="env-val"
+              id={`env-val-${scope.type}`}
               type="text"
               value={value}
               onChange={(e) => setValue(e.target.value)}
