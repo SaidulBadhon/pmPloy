@@ -97,7 +97,7 @@ fi
 
 # --- Build the frontend.
 log "▶ building web bundle"
-if ! bun --filter @pmploy/web run build >>"$LOG" 2>&1; then
+if ! bun --filter @pmploy/web build >>"$LOG" 2>&1; then
   log "✗ web build failed"
   exit 9
 fi
