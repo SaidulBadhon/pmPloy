@@ -28,10 +28,46 @@ const route = new Hono<{ Variables: AuthVars }>();
 
 route.use("*", requireAuth);
 
-function applicationView(
+async function safeDescribe(name: string): Promise<Pm2Info | null> {
+  try {
+    return await describeProcess(name);
+  } catch {
+    return null;
+  }
+}
+
+async function describeServices(
   app: ApplicationDoc,
-  pm2: Pm2Info | null,
-): PublicApplication {
+): Promise<{ name: string; pm2Name: string; port: number | null; isPrimary: boolean; pm2: Pm2Info | null }[]> {
+  const list = app.services ?? [];
+  return Promise.all(
+    list.map(async (s) => ({
+      name: s.name,
+      pm2Name: s.pm2Name,
+      port: s.port ?? null,
+      isPrimary: !!s.isPrimary,
+      pm2: await safeDescribe(s.pm2Name),
+    })),
+  );
+}
+
+function aggregateStatus(
+  current: ApplicationDoc["status"],
+  services: { pm2: Pm2Info | null }[],
+): ApplicationDoc["status"] {
+  if (services.length === 0) return current;
+  const statuses = services.map((s) => s.pm2?.status ?? "unknown");
+  if (statuses.every((s) => s === "online")) return "running";
+  if (statuses.some((s) => s === "errored")) return "errored";
+  if (statuses.every((s) => s === "stopped")) return "stopped";
+  return "degraded";
+}
+
+async function applicationView(
+  app: ApplicationDoc,
+): Promise<PublicApplication> {
+  const services = await describeServices(app);
+  const primary = services.find((s) => s.isPrimary) ?? services[0] ?? null;
   return {
     id: String(app._id),
     teamId: String(app.teamId),
@@ -53,20 +89,13 @@ function applicationView(
         }
       : null,
     port: app.port ?? null,
-    status: app.status,
+    status: aggregateStatus(app.status, services),
     pm2Name: app.pm2Name,
-    pm2,
+    pm2: primary?.pm2 ?? null,
+    services,
     createdAt: (app as ApplicationDoc & { createdAt: Date }).createdAt.toISOString(),
     updatedAt: (app as ApplicationDoc & { updatedAt: Date }).updatedAt.toISOString(),
   };
-}
-
-async function safeDescribe(name: string): Promise<Pm2Info | null> {
-  try {
-    return await describeProcess(name);
-  } catch {
-    return null;
-  }
 }
 
 // List apps in a team.
@@ -75,7 +104,7 @@ route.get("/teams/:teamId/apps", requireTeamRole("viewer"), async (c) => {
   const apps = await Application.find({ teamId: new Types.ObjectId(teamId) }).lean();
   // Best-effort PM2 status enrichment in parallel.
   const enriched = await Promise.all(
-    apps.map(async (a) => applicationView(a as ApplicationDoc, await safeDescribe(a.pm2Name))),
+    apps.map((a) => applicationView(a as ApplicationDoc)),
   );
   return c.json({ apps: enriched });
 });
@@ -128,7 +157,7 @@ route.post(
       meta: { sourceType: app.sourceType },
     });
 
-    return c.json(applicationView(app, null), 201);
+    return c.json(await applicationView(app), 201);
   },
 );
 
@@ -145,8 +174,7 @@ async function loadAppForTeam(teamId: string, appId: string) {
 route.get("/teams/:teamId/apps/:appId", requireTeamRole("viewer"), async (c) => {
   const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
   if (!app) return c.json({ error: "not found" }, 404);
-  const pm2 = await safeDescribe(app.pm2Name);
-  return c.json(applicationView(app, pm2));
+  return c.json(await applicationView(app));
 });
 
 // Update.
@@ -168,8 +196,7 @@ route.patch(
       Object.assign(app.github, patch.github);
     }
     await app.save();
-    const pm2 = await safeDescribe(app.pm2Name);
-    return c.json(applicationView(app, pm2));
+    return c.json(await applicationView(app));
   },
 );
 
@@ -185,7 +212,11 @@ route.delete(
       await caddy.removeDomain(d.host).catch(() => undefined);
       await d.deleteOne();
     }
-    await deleteProcess(app.pm2Name).catch(() => undefined);
+    for (const svc of app.services ?? []) {
+      await deleteProcess(svc.pm2Name).catch(() => undefined);
+    }
+    // Legacy: also nuke the pre-namespacing process name if it ever existed.
+    await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
     await app.deleteOne();
     const user = c.get("user");
     await recordAudit({
@@ -217,22 +248,28 @@ route.post(
         409,
       );
     }
+    const services = app.services ?? [];
+    if (services.length === 0) {
+      return c.json({ error: "no_services", message: "this app has no services to start; redeploy" }, 409);
+    }
     try {
       app.status = "deploying";
       await app.save();
       const userEnv = await getDecryptedEnv(String(app._id));
-      const info = await startProcess({
-        name: app.pm2Name,
-        cwd: app.cwd,
-        script: app.script,
-        interpreter: app.interpreter || undefined,
-        instances: app.instances ?? 1,
-        execMode: app.execMode,
-        env: { ...userEnv, PORT: String(app.port ?? "") },
-      });
-      app.status = info.status === "online" ? "running" : "errored";
+      for (const svc of services) {
+        await startProcess({
+          name: svc.pm2Name,
+          cwd: app.cwd,
+          script: app.script, // for the synthetic "default" service
+          interpreter: app.interpreter || undefined,
+          instances: app.instances ?? 1,
+          execMode: app.execMode,
+          env: { ...userEnv, PORT: String(svc.port ?? "") },
+        });
+      }
+      app.status = "running";
       await app.save();
-      return c.json(applicationView(app, info));
+      return c.json(await applicationView(app));
     } catch (err) {
       app.status = "errored";
       await app.save();
@@ -251,11 +288,12 @@ route.post(
     const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
     try {
-      await stopProcess(app.pm2Name);
+      for (const svc of app.services ?? []) {
+        await stopProcess(svc.pm2Name).catch(() => undefined);
+      }
       app.status = "stopped";
       await app.save();
-      const info = await safeDescribe(app.pm2Name);
-      return c.json(applicationView(app, info));
+      return c.json(await applicationView(app));
     } catch (err) {
       return c.json(
         { error: "pm2_stop_failed", message: (err as Error).message },
@@ -272,11 +310,10 @@ route.post(
     const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
     try {
-      await restartProcess(app.pm2Name);
-      const info = await safeDescribe(app.pm2Name);
-      app.status = info?.status === "online" ? "running" : "errored";
-      await app.save();
-      return c.json(applicationView(app, info));
+      for (const svc of app.services ?? []) {
+        await restartProcess(svc.pm2Name).catch(() => undefined);
+      }
+      return c.json(await applicationView(app));
     } catch (err) {
       return c.json(
         { error: "pm2_restart_failed", message: (err as Error).message },
