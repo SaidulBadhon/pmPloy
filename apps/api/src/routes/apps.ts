@@ -23,6 +23,7 @@ import {
 import { caddy } from "../services/caddy.ts";
 import { getDecryptedEnv } from "../services/envVars.ts";
 import { recordAudit } from "../services/audit.ts";
+import { tailProcessLogs, pm2LogPaths } from "../services/processLogs.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
 
@@ -320,6 +321,50 @@ route.post(
         500,
       );
     }
+  },
+);
+
+route.get(
+  "/teams/:teamId/apps/:appId/services/:serviceName/logs",
+  requireTeamRole("viewer"),
+  async (c) => {
+    const app = await loadAppForTeam(c.req.param("teamId"), c.req.param("appId"));
+    if (!app) return c.json({ error: "not found" }, 404);
+    const svc = (app.services ?? []).find((s) => s.name === c.req.param("serviceName"));
+    if (!svc) return c.json({ error: "service not found" }, 404);
+
+    const { stdout, stderr } = pm2LogPaths(svc.pm2Name);
+    const abort = new AbortController();
+    c.req.raw.signal.addEventListener("abort", () => abort.abort(), { once: true });
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const enc = new TextEncoder();
+        try {
+          for await (const ev of tailProcessLogs({
+            stdoutPath: stdout,
+            stderrPath: stderr,
+            signal: abort.signal,
+            tailLines: 200,
+          })) {
+            controller.enqueue(enc.encode(`data: ${JSON.stringify(ev)}\n\n`));
+          }
+        } finally {
+          controller.close();
+        }
+      },
+      cancel() {
+        abort.abort();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   },
 );
 
