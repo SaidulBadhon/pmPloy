@@ -18,6 +18,7 @@ export const AppStatusSchema = z.enum([
   "running",
   "stopped",
   "errored",
+  "degraded",
 ]);
 export type AppStatus = z.infer<typeof AppStatusSchema>;
 
