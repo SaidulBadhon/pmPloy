@@ -269,7 +269,7 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
         name: svc.pm2Name,
         cwd: eco.cwd ? path.resolve(app.cwd, eco.cwd) : app.cwd,
         script: eco.script,
-        interpreter: eco.interpreter,
+        interpreter: resolveInterpreter(eco.interpreter),
         args: eco.args,
         instances: eco.instances ?? 1,
         execMode: eco.execMode ?? "fork",
@@ -309,7 +309,7 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
     name: defaultName,
     cwd: app.cwd,
     script: app.script,
-    interpreter: app.interpreter || undefined,
+    interpreter: resolveInterpreter(app.interpreter || undefined),
     instances: app.instances ?? 1,
     execMode: app.execMode,
     env: { ...userEnv, PORT: String(app.port ?? "") },
@@ -337,6 +337,29 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
   if (after && after.status !== "online") {
     throw new Error(`pm2 process not online (status ${after.status})`);
   }
+}
+
+/**
+ * PM2 resolves `interpreter` against its own process's PATH, which under
+ * systemd may not include ~/.bun/bin. Pre-resolve bare names like "bun" to
+ * absolute paths so PM2 doesn't fail with "Interpreter X is NOT AVAILABLE in
+ * PATH". If the value is already absolute, contains a slash, or can't be
+ * found, return it unchanged so PM2's own error surfaces.
+ */
+function resolveInterpreter(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  if (name.includes("/")) return name;
+  const home = process.env.HOME ?? "";
+  const dirs = [
+    home ? path.join(home, ".bun", "bin") : "",
+    "/usr/local/bin",
+    ...(process.env.PATH ?? "").split(":"),
+  ].filter(Boolean);
+  for (const dir of dirs) {
+    const candidate = path.join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return name;
 }
 
 function detectInstallCommand(dir: string): string {
