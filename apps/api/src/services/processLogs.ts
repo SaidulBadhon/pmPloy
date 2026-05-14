@@ -21,23 +21,25 @@ export type TailOptions = {
 export async function* tailProcessLogs(opts: TailOptions): AsyncIterable<LogEvent> {
   const tail = opts.tailLines ?? 200;
 
-  // Snapshot the existing tail of each file.
+  // Snapshot the existing tail of each file AND record its byte length in one
+  // pass so writes that race the snapshot can't be silently dropped by the
+  // subsequent watcher.
+  const offsets = new Map<string, number>();
   for (const [stream, file] of [
     ["stdout", opts.stdoutPath] as const,
     ["stderr", opts.stderrPath] as const,
   ]) {
-    if (!existsSync(file)) continue;
-    const content = await readFile(file, "utf-8");
+    if (!existsSync(file)) {
+      offsets.set(file, 0);
+      continue;
+    }
+    const buf = await readFile(file);
+    offsets.set(file, buf.length);
+    const content = buf.toString("utf-8");
     const lines = content.split("\n");
     if (lines.at(-1) === "") lines.pop();
     const slice = lines.slice(Math.max(0, lines.length - tail));
     for (const line of slice) yield { stream, line };
-  }
-
-  // Watch both files for appended content.
-  const offsets = new Map<string, number>();
-  for (const file of [opts.stdoutPath, opts.stderrPath]) {
-    offsets.set(file, existsSync(file) ? (await readFile(file)).length : 0);
   }
 
   const queue: LogEvent[] = [];
@@ -80,6 +82,9 @@ export async function* tailProcessLogs(opts: TailOptions): AsyncIterable<LogEven
     }
   }
 
+  const onAbort = () => wake();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
+
   try {
     while (!opts.signal?.aborted) {
       if (queue.length > 0) {
@@ -88,12 +93,10 @@ export async function* tailProcessLogs(opts: TailOptions): AsyncIterable<LogEven
       }
       await new Promise<void>((r) => {
         resolve = r;
-        opts.signal?.addEventListener("abort", () => {
-          wake();
-        }, { once: true });
       });
     }
   } finally {
+    opts.signal?.removeEventListener("abort", onAbort);
     for (const w of watchers) {
       try {
         (w as { close?: () => void }).close?.();
