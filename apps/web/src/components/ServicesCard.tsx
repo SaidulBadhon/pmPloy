@@ -3,14 +3,7 @@ import type { PublicService } from "@pmploy/shared";
 import { Card, CardDescription, CardTitle } from "./ui/Card";
 import { StatusPill } from "./ui/StatusPill";
 import { bytes } from "../lib/format";
-
-function serviceAppStatus(svc: PublicService): "running" | "stopped" | "errored" | "deploying" {
-  const s = svc.pm2?.status;
-  if (s === "online") return "running";
-  if (s === "errored") return "errored";
-  if (s === "launching") return "deploying";
-  return "stopped";
-}
+import { serviceAppStatus } from "../lib/serviceStatus";
 
 export function ServicesCard({
   appId,

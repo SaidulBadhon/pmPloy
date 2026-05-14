@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { PublicApplication, PublicEnvVar, PublicService } from "@pmploy/shared";
+import type { PublicApplication, PublicEnvVar } from "@pmploy/shared";
 import { useAuth } from "../stores/auth";
 import { api } from "../lib/api";
 import { Card, CardDescription, CardTitle } from "../components/ui/Card";
@@ -8,14 +8,7 @@ import { StatusPill } from "../components/ui/StatusPill";
 import { EnvVarsCard } from "../components/EnvVarsCard";
 import { ServiceLogStream } from "../components/ServiceLogStream";
 import { bytes, ms } from "../lib/format";
-
-function serviceAppStatus(svc: PublicService): "running" | "stopped" | "errored" | "deploying" {
-  const s = svc.pm2?.status;
-  if (s === "online") return "running";
-  if (s === "errored") return "errored";
-  if (s === "launching") return "deploying";
-  return "stopped";
-}
+import { serviceAppStatus } from "../lib/serviceStatus";
 
 export default function ServiceDetailPage() {
   const { appId, serviceName } = useParams<{ appId: string; serviceName: string }>();
