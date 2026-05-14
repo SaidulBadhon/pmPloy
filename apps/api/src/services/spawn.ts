@@ -12,9 +12,25 @@ export async function runStreaming(
   cmd: string[],
   opts: SpawnOptions,
 ): Promise<number> {
+  // systemd may launch the API with a minimal PATH that omits ~/.bun/bin,
+  // which would break `bun install` (and other tools) during deploys.
+  // Re-add the common install locations so spawned children can find them.
+  const home = process.env.HOME ?? "";
+  const augmentedPath = [
+    home ? `${home}/.bun/bin` : "",
+    "/usr/local/bin",
+    process.env.PATH ?? "",
+  ]
+    .filter(Boolean)
+    .join(":");
+
   const proc = Bun.spawn(cmd, {
     cwd: opts.cwd,
-    env: { ...process.env, ...opts.env } as Record<string, string>,
+    env: {
+      ...process.env,
+      PATH: augmentedPath,
+      ...opts.env,
+    } as Record<string, string>,
     stdout: "pipe",
     stderr: "pipe",
   });
