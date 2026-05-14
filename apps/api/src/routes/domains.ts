@@ -23,6 +23,7 @@ function view(d: DomainDoc): PublicDomain {
     host: d.host,
     sslStatus: d.sslStatus,
     lastError: d.lastError ?? "",
+    serviceName: d.serviceName ?? "",
     createdAt: (d as DomainDoc & { createdAt: Date }).createdAt.toISOString(),
     updatedAt: (d as DomainDoc & { updatedAt: Date }).updatedAt.toISOString(),
   };
@@ -63,13 +64,28 @@ route.post(
   async (c) => {
     const app = await loadApp(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
-    if (!app.port) {
+    const { host, serviceName } = c.req.valid("json");
+
+    const services = app.services ?? [];
+    if (services.length === 0 && !app.port) {
       return c.json(
         { error: "app_has_no_port", message: "deploy the app before attaching a domain" },
         409,
       );
     }
-    const { host } = c.req.valid("json");
+    if (serviceName && !services.some((s) => s.name === serviceName)) {
+      return c.json({ error: "unknown_service", message: `no service named "${serviceName}"` }, 400);
+    }
+    const target = serviceName
+      ? services.find((s) => s.name === serviceName) ?? null
+      : services.find((s) => s.isPrimary) ?? services[0] ?? null;
+    const targetPort = target?.port ?? app.port ?? null;
+    if (!targetPort) {
+      return c.json(
+        { error: "service_has_no_port", message: `service "${serviceName || "(primary)"}" has no port` },
+        409,
+      );
+    }
 
     const existing = await Domain.findOne({ host }).lean();
     if (existing) {
@@ -84,10 +100,11 @@ route.post(
       appId: app._id,
       teamId: app.teamId,
       sslStatus: "pending",
+      serviceName: serviceName || "",
     });
 
     try {
-      await caddy.upsertDomain(host, app.port);
+      await caddy.upsertDomain(host, targetPort);
       dom.sslStatus = "active";
       dom.lastError = "";
       await dom.save();
@@ -103,7 +120,7 @@ route.post(
       userEmail: user.email,
       action: "domain.attach",
       target: { type: "domain", id: String(dom._id), label: dom.host },
-      meta: { appId: String(app._id), appName: app.name },
+      meta: { appId: String(app._id), appName: app.name, serviceName: dom.serviceName },
     });
     return c.json(view(dom), 201);
   },
@@ -116,15 +133,22 @@ route.post(
   async (c) => {
     const app = await loadApp(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
-    if (!app.port) {
-      return c.json({ error: "app_has_no_port" }, 409);
-    }
     const id = c.req.param("domainId");
     if (!Types.ObjectId.isValid(id)) return c.json({ error: "not found" }, 404);
     const dom = await Domain.findOne({ _id: new Types.ObjectId(id), appId: app._id });
     if (!dom) return c.json({ error: "not found" }, 404);
+
+    const services = app.services ?? [];
+    const target = dom.serviceName
+      ? services.find((s) => s.name === dom.serviceName) ?? null
+      : services.find((s) => s.isPrimary) ?? services[0] ?? null;
+    const targetPort = target?.port ?? app.port ?? null;
+    if (!targetPort) {
+      return c.json({ error: "app_has_no_port" }, 409);
+    }
+
     try {
-      await caddy.upsertDomain(dom.host, app.port);
+      await caddy.upsertDomain(dom.host, targetPort);
       dom.sslStatus = "active";
       dom.lastError = "";
       await dom.save();

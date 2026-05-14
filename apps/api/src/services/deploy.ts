@@ -353,19 +353,31 @@ function detectInstallCommand(dir: string): string {
 
 async function resyncDomains(
   appId: string,
-  port: number | null,
+  _fallbackPort: number | null,
   ctx: LogContext,
 ): Promise<void> {
-  if (!port) return;
+  const app = await Application.findById(appId);
+  if (!app) return;
+  const services = app.services ?? [];
   const domains = await Domain.find({ appId: new Types.ObjectId(appId) });
   if (domains.length === 0) return;
   for (const d of domains) {
     try {
-      await caddy.upsertDomain(d.host, port);
+      const target = pickTargetService(services, d.serviceName ?? "");
+      if (!target || !target.port) {
+        d.sslStatus = "error";
+        d.lastError = target
+          ? `service "${target.name}" has no port`
+          : `service "${d.serviceName || "(primary)"}" not found`;
+        await d.save();
+        await ctx.log(`✗ caddy sync skipped for ${d.host}: ${d.lastError}`);
+        continue;
+      }
+      await caddy.upsertDomain(d.host, target.port);
       d.sslStatus = "active";
       d.lastError = "";
       await d.save();
-      await ctx.log(`▶ caddy: ${d.host} -> 127.0.0.1:${port}`);
+      await ctx.log(`▶ caddy: ${d.host} -> 127.0.0.1:${target.port} (${target.name})`);
     } catch (err) {
       d.sslStatus = "error";
       d.lastError = err instanceof Error ? err.message : String(err);
@@ -373,6 +385,16 @@ async function resyncDomains(
       await ctx.log(`✗ caddy sync failed for ${d.host}: ${d.lastError}`);
     }
   }
+}
+
+function pickTargetService(
+  services: { name: string; port?: number | null; isPrimary: boolean }[],
+  serviceName: string,
+): { name: string; port?: number | null } | null {
+  if (serviceName) {
+    return services.find((s) => s.name === serviceName) ?? null;
+  }
+  return services.find((s) => s.isPrimary) ?? services[0] ?? null;
 }
 
 async function pruneOldDeployDirs(appId: string): Promise<void> {
