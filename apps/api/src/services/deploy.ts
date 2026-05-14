@@ -285,6 +285,15 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
 
     app.set("services", services);
     await app.save();
+
+    // Health check: give PM2 a moment to settle, then confirm each service is online.
+    await new Promise((r) => setTimeout(r, 250));
+    for (const svc of services) {
+      const after = await describeProcess(svc.pm2Name).catch(() => null);
+      if (after && after.status !== "online") {
+        throw new Error(`service ${svc.name} not online (status ${after.status})`);
+      }
+    }
     return;
   }
 
