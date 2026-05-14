@@ -269,8 +269,8 @@ route.post(
     try {
       app.status = "deploying";
       await app.save();
-      const userEnv = await getDecryptedEnv(String(app._id));
       const svc = services[0]!;
+      const userEnv = await getDecryptedEnv(String(app._id), svc.name);
       await startProcess({
         name: svc.pm2Name,
         cwd: app.cwd,
