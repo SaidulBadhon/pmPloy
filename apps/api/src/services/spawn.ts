@@ -70,5 +70,8 @@ export function runShell(
   command: string,
   opts: SpawnOptions,
 ): Promise<number> {
-  return runStreaming(["bash", "-lc", command], opts);
+  // Use a non-login shell ("-c", not "-lc") so /etc/profile doesn't clobber
+  // the PATH we set in runStreaming (Ubuntu's /etc/profile unconditionally
+  // resets PATH for login shells, which would drop ~/.bun/bin).
+  return runStreaming(["bash", "-c", command], opts);
 }
