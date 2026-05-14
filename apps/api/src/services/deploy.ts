@@ -25,6 +25,8 @@ import { caddy } from "./caddy.ts";
 import { Domain } from "../models/Domain.ts";
 import { getDecryptedEnv } from "./envVars.ts";
 import { recordAudit } from "./audit.ts";
+import { findEcosystemFile, parseEcosystem } from "./ecosystem.ts";
+import { reconcileServices } from "./appServices.ts";
 
 const KEEP_DEPLOYMENTS = 3;
 
@@ -137,8 +139,8 @@ async function deployLocal(
   ctx: LogContext,
 ): Promise<void> {
   if (!app.cwd) throw new Error("local app has no working directory configured");
-  await ctx.log(`▶ launching ${app.script} in ${app.cwd}`);
-  await startApp(app, ctx);
+  await ctx.log(`▶ launching app in ${app.cwd}`);
+  await startServices(app, ctx);
   dep.workdir = app.cwd;
 }
 
@@ -233,17 +235,69 @@ async function deployFromGithub(
   app.cwd = buildDir;
   await app.save();
 
-  await ctx.log(`▶ launching ${app.script} in ${buildDir}`);
-  await startApp(app, ctx);
+  await startServices(app, ctx);
 }
 
-async function startApp(app: AppDoc, ctx: LogContext): Promise<void> {
-  const name = pm2NameForApp(String(app._id));
-  // Make sure any prior instance is torn down so it picks up the new cwd.
-  await deleteProcess(name).catch(() => undefined);
+async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
+  const ecoPath = findEcosystemFile(app.cwd);
+  if (ecoPath) {
+    await ctx.log(`▶ detected ecosystem file: ${path.relative(app.cwd, ecoPath)}`);
+    const parsed = await parseEcosystem(ecoPath);
+    const existing = (app.services ?? []).map((s) => ({
+      name: s.name,
+      pm2Name: s.pm2Name,
+      port: s.port ?? null,
+      isPrimary: !!s.isPrimary,
+    }));
+    const { services, removed } = reconcileServices(String(app._id), existing, parsed.apps);
+
+    // Backwards-compat: on the first deploy after this upgrade, the old
+    // single-process name might still be alive.
+    await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
+
+    const userEnv = await getDecryptedEnv(String(app._id));
+    for (const svc of services) {
+      const eco = parsed.apps.find((a) => a.name === svc.name);
+      if (!eco) continue;
+      await ctx.log(`▶ launching service ${svc.name} (${svc.pm2Name})`);
+      const env: Record<string, string> = {
+        ...userEnv,
+        ...(eco.env ?? {}),
+      };
+      if (svc.port !== null) env.PORT = String(svc.port);
+      const info = await startProcess({
+        name: svc.pm2Name,
+        cwd: eco.cwd ? path.resolve(app.cwd, eco.cwd) : app.cwd,
+        script: eco.script,
+        interpreter: eco.interpreter,
+        args: eco.args,
+        instances: eco.instances ?? 1,
+        execMode: eco.execMode ?? "fork",
+        env,
+      });
+      await ctx.log(`  pm2 status: ${info.status}, pid ${info.pid}`);
+    }
+
+    for (const gone of removed) {
+      await ctx.log(`▶ tearing down removed service ${gone.name}`);
+      await deleteProcess(gone.pm2Name).catch(() => undefined);
+    }
+
+    app.set("services", services);
+    await app.save();
+    return;
+  }
+
+  // Single-process fallback. Materialized into a single "default" service so
+  // the rest of the system can treat all apps uniformly.
+  const defaultName = pm2NameForApp(String(app._id));
+  // Tear down the legacy un-suffixed process if it still exists.
+  await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
+
   const userEnv = await getDecryptedEnv(String(app._id));
+  await ctx.log(`▶ launching ${app.script} (${defaultName})`);
   const info = await startProcess({
-    name,
+    name: defaultName,
     cwd: app.cwd,
     script: app.script,
     interpreter: app.interpreter || undefined,
@@ -251,10 +305,26 @@ async function startApp(app: AppDoc, ctx: LogContext): Promise<void> {
     execMode: app.execMode,
     env: { ...userEnv, PORT: String(app.port ?? "") },
   });
-  await ctx.log(`▶ pm2 status: ${info.status}, pid ${info.pid}`);
-  // Give PM2 a moment to settle, then re-check.
+  await ctx.log(`  pm2 status: ${info.status}, pid ${info.pid}`);
+
+  // Tear down any prior multi-service processes that no longer apply.
+  for (const gone of app.services ?? []) {
+    if (gone.pm2Name === defaultName) continue;
+    await deleteProcess(gone.pm2Name).catch(() => undefined);
+  }
+
+  app.set("services", [
+    {
+      name: "default",
+      pm2Name: defaultName,
+      port: app.port ?? null,
+      isPrimary: true,
+    },
+  ]);
+  await app.save();
+
   await new Promise((r) => setTimeout(r, 250));
-  const after = await describeProcess(name).catch(() => null);
+  const after = await describeProcess(defaultName).catch(() => null);
   if (after && after.status !== "online") {
     throw new Error(`pm2 process not online (status ${after.status})`);
   }
