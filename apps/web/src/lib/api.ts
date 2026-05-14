@@ -28,10 +28,13 @@ export async function api<T = unknown>(
   const text = await res.text();
   const data = text ? safeJson(text) : null;
   if (!res.ok) {
+    const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
     const message =
-      (data && typeof data === "object" && "error" in data
-        ? String((data as { error: unknown }).error)
-        : null) ?? `HTTP ${res.status}`;
+      (obj && typeof obj.message === "string" && obj.message.trim()
+        ? obj.message
+        : null) ??
+      (obj && "error" in obj ? String(obj.error) : null) ??
+      `HTTP ${res.status}`;
     throw new ApiError(res.status, message, data);
   }
   return data as T;

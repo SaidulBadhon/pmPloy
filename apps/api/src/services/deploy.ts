@@ -438,6 +438,101 @@ async function pruneOldDeployDirs(appId: string): Promise<void> {
   );
 }
 
+/** GitHub clones live under `PMPLOY_DATA_DIR/apps/<appId>/<deploymentId>/`. */
+export function isManagedGithubDeployDir(appId: string, workdir: string): boolean {
+  if (!workdir) return false;
+  const appDeploymentsRoot = path.resolve(env.PMPLOY_DATA_DIR, "apps", appId);
+  const resolved = path.resolve(workdir);
+  const rel = path.relative(appDeploymentsRoot, resolved);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function cwdInsideOrEqualsWorkdir(appCwd: string, workdir: string): boolean {
+  if (!workdir || !appCwd) return false;
+  const w = path.resolve(workdir);
+  const c = path.resolve(appCwd);
+  const rel = path.relative(w, c);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+export type DeleteDeploymentResult =
+  | { ok: true }
+  | { ok: false; status: number; error: string; message: string };
+
+/**
+ * Removes a deployment record and, for GitHub artifact dirs under our data root,
+ * deletes the checkout on disk. Refuses if the deploy is still running or if
+ * the app's live cwd still lives inside this deployment's workdir.
+ */
+export async function deleteDeploymentForApp(
+  teamId: string,
+  appId: string,
+  deploymentId: string,
+): Promise<DeleteDeploymentResult> {
+  if (
+    !Types.ObjectId.isValid(teamId) ||
+    !Types.ObjectId.isValid(appId) ||
+    !Types.ObjectId.isValid(deploymentId)
+  ) {
+    return {
+      ok: false,
+      status: 404,
+      error: "not_found",
+      message: "Not found.",
+    };
+  }
+
+  const app = await Application.findOne({
+    _id: new Types.ObjectId(appId),
+    teamId: new Types.ObjectId(teamId),
+  });
+  if (!app) {
+    return { ok: false, status: 404, error: "not_found", message: "Not found." };
+  }
+
+  const dep = await Deployment.findOne({
+    _id: new Types.ObjectId(deploymentId),
+    appId: app._id,
+  });
+  if (!dep) {
+    return { ok: false, status: 404, error: "not_found", message: "Not found." };
+  }
+
+  if (dep.status === "queued" || dep.status === "building") {
+    return {
+      ok: false,
+      status: 409,
+      error: "deploy_in_progress",
+      message:
+        "This deployment is still in progress; wait until it finishes or fails before deleting.",
+    };
+  }
+
+  const workdir = (dep.workdir ?? "").trim();
+  const managedDir = workdir.length > 0 && isManagedGithubDeployDir(appId, workdir);
+  if (managedDir && cwdInsideOrEqualsWorkdir(app.cwd ?? "", workdir)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "deployment_active",
+      message:
+        "This checkout is still the app's live working directory. Deploy another revision first, then you can delete this deployment.",
+    };
+  }
+
+  await Deployment.deleteOne({ _id: dep._id });
+
+  if (managedDir) {
+    try {
+      await rm(path.resolve(workdir), { recursive: true, force: true });
+    } catch (err) {
+      console.error(`[deploy] failed to remove workdir ${workdir}:`, err);
+    }
+  }
+
+  return { ok: true };
+}
+
 // --- log buffering helpers ---
 
 type LogContext = {

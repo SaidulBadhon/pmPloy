@@ -109,6 +109,28 @@ export default function AppDetailPage() {
     }
   }
 
+  async function onDeleteDeployment(depId: string) {
+    if (!currentTeamId || !appId) return;
+    if (
+      !confirm(
+        "Delete this deployment from history and remove its checkout files on the server (when applicable)? This cannot be undone.",
+      )
+    )
+      return;
+    setBusy(`del-dep:${depId}`);
+    setError(null);
+    try {
+      await api(`/teams/${currentTeamId}/apps/${appId}/deployments/${depId}`, {
+        method: "DELETE",
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "delete deployment failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!app) {
     return (
       <div className="space-y-2">
@@ -285,16 +307,33 @@ export default function AppDetailPage() {
                       {d.triggeredBy} · {new Date(d.createdAt).toLocaleString()}
                     </span>
                   </Link>
-                  {canRedeploy && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy !== null}
-                      onClick={() => onDeploy(d.commitSha)}
-                    >
-                      {busy === d.commitSha ? "Redeploying…" : "Redeploy"}
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {canRedeploy && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy !== null}
+                        onClick={() => onDeploy(d.commitSha)}
+                      >
+                        {busy === d.commitSha ? "Redeploying…" : "Redeploy"}
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busy !== null || d.status === "queued" || d.status === "building"}
+                        title={
+                          d.status === "queued" || d.status === "building"
+                            ? "Wait until this deployment finishes"
+                            : undefined
+                        }
+                        onClick={() => onDeleteDeployment(d.id)}
+                      >
+                        {busy === `del-dep:${d.id}` ? "Deleting…" : "Delete"}
+                      </Button>
+                    )}
+                  </div>
                 </li>
               );
             })}

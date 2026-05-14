@@ -10,7 +10,8 @@ import {
 import { Application } from "../models/Application.ts";
 import { Deployment, type DeploymentDoc } from "../models/Deployment.ts";
 import { requireAuth, requireTeamRole, type AuthVars } from "../auth/rbac.ts";
-import { enqueueDeploy } from "../services/deploy.ts";
+import { deleteDeploymentForApp, enqueueDeploy } from "../services/deploy.ts";
+import { recordAudit } from "../services/audit.ts";
 import { deployBus, deployTopic } from "../services/pubsub.ts";
 
 const route = new Hono<{ Variables: AuthVars }>();
@@ -86,6 +87,34 @@ route.post(
         500,
       );
     }
+  },
+);
+
+// Delete deployment metadata and GitHub checkout dir (when applicable).
+route.delete(
+  "/teams/:teamId/apps/:appId/deployments/:deploymentId",
+  requireTeamRole("admin"),
+  async (c) => {
+    const teamId = c.req.param("teamId");
+    const appId = c.req.param("appId");
+    const deploymentId = c.req.param("deploymentId");
+    const result = await deleteDeploymentForApp(teamId, appId, deploymentId);
+    if (!result.ok) {
+      const body = { error: result.error, message: result.message };
+      if (result.status === 404) return c.json(body, 404);
+      if (result.status === 409) return c.json(body, 409);
+      return c.json(body, 500);
+    }
+    const user = c.get("user");
+    await recordAudit({
+      teamId,
+      userId: user.id,
+      userEmail: user.email,
+      action: "deployment.delete",
+      target: { type: "app", id: appId },
+      meta: { deploymentId },
+    });
+    return c.json({ ok: true });
   },
 );
 
