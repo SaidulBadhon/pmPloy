@@ -139,6 +139,15 @@ route.post(
     if (!dom) return c.json({ error: "not found" }, 404);
 
     const services = app.services ?? [];
+    if (dom.serviceName && !services.some((s) => s.name === dom.serviceName)) {
+      return c.json(
+        {
+          error: "unknown_service",
+          message: `service "${dom.serviceName}" no longer exists; detach and re-attach the domain`,
+        },
+        409,
+      );
+    }
     const target = dom.serviceName
       ? services.find((s) => s.name === dom.serviceName) ?? null
       : services.find((s) => s.isPrimary) ?? services[0] ?? null;
