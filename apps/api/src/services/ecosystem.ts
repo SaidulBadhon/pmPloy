@@ -116,7 +116,7 @@ function parsePort(v: unknown): number | undefined {
 
 async function evalInSubprocess(filePath: string): Promise<unknown> {
   let out = "";
-  const code = await runStreaming(
+  const run = runStreaming(
     [
       "bun",
       "-e",
@@ -129,6 +129,19 @@ async function evalInSubprocess(filePath: string): Promise<unknown> {
       },
     },
   );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`ecosystem file evaluation timed out after ${PARSE_TIMEOUT_MS}ms`)),
+      PARSE_TIMEOUT_MS,
+    );
+  });
+  let code: number;
+  try {
+    code = await Promise.race([run, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (code !== 0) {
     throw new Error(`bun -e exited with code ${code} while evaluating ecosystem file`);
   }
@@ -141,6 +154,4 @@ async function evalInSubprocess(filePath: string): Promise<unknown> {
   }
 }
 
-// PARSE_TIMEOUT_MS retained for a future Promise.race wrap; runStreaming
-// itself currently has no timeout, but in deploy we will wrap the call.
 export const ECOSYSTEM_PARSE_TIMEOUT_MS = PARSE_TIMEOUT_MS;

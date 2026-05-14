@@ -253,21 +253,35 @@ route.post(
     if (services.length === 0) {
       return c.json({ error: "no_services", message: "this app has no services to start; redeploy" }, 409);
     }
+    // Multi-service apps own per-service config in ecosystem.config.cjs;
+    // pmPloy only has app.script/interpreter/etc for the synthetic "default"
+    // service, so re-starting named services here would corrupt their config.
+    // Redeploying is the safe path.
+    const isMultiService =
+      services.length > 1 || (services[0] && services[0].name !== "default");
+    if (isMultiService) {
+      return c.json(
+        {
+          error: "multi_service_app",
+          message: "this app has multiple services; redeploy to (re)start them",
+        },
+        409,
+      );
+    }
     try {
       app.status = "deploying";
       await app.save();
       const userEnv = await getDecryptedEnv(String(app._id));
-      for (const svc of services) {
-        await startProcess({
-          name: svc.pm2Name,
-          cwd: app.cwd,
-          script: app.script, // for the synthetic "default" service
-          interpreter: app.interpreter || undefined,
-          instances: app.instances ?? 1,
-          execMode: app.execMode,
-          env: { ...userEnv, PORT: String(svc.port ?? "") },
-        });
-      }
+      const svc = services[0]!;
+      await startProcess({
+        name: svc.pm2Name,
+        cwd: app.cwd,
+        script: app.script,
+        interpreter: app.interpreter || undefined,
+        instances: app.instances ?? 1,
+        execMode: app.execMode,
+        env: { ...userEnv, PORT: String(svc.port ?? "") },
+      });
       app.status = "running";
       await app.save();
       return c.json(await applicationView(app));
