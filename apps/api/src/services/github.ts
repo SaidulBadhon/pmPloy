@@ -87,6 +87,45 @@ export async function getInstallationAccount(installationId: number): Promise<Gi
   };
 }
 
+export type AppInstallationSummary = {
+  installationId: number;
+  account: GithubAccount;
+};
+
+export async function listAllAppInstallations(): Promise<AppInstallationSummary[]> {
+  const app = await githubApp();
+  const out: AppInstallationSummary[] = [];
+  let page = 1;
+  while (true) {
+    const { data } = await app.octokit.request("GET /app/installations", {
+      per_page: 100,
+      page,
+    });
+    for (const inst of data) {
+      const account = inst.account;
+      if (!account) continue;
+      const login =
+        "login" in account ? account.login : (account as { slug?: string }).slug;
+      const accountType = (
+        inst.target_type === "Organization" ? "Organization" : "User"
+      ) as "User" | "Organization";
+      out.push({
+        installationId: inst.id,
+        account: {
+          login: String(login ?? ""),
+          id: account.id,
+          type: accountType,
+          avatarUrl: "avatar_url" in account ? account.avatar_url : "",
+        },
+      });
+    }
+    if (data.length < 100) break;
+    page++;
+    if (page > 50) break;
+  }
+  return out;
+}
+
 export type GithubRepo = {
   id: number;
   fullName: string;

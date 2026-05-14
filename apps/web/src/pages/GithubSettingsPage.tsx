@@ -18,6 +18,8 @@ export default function GithubSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [manualId, setManualId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     if (!currentTeamId) return;
@@ -79,6 +81,33 @@ export default function GithubSettingsPage() {
     }
   }
 
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function onSync() {
+    if (!currentTeamId) return;
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await api<{ installations: GithubInstallation[] }>(
+        `/teams/${currentTeamId}/github/installations/sync`,
+        { method: "POST" },
+      );
+      setInstallations(data.installations);
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else setError(err instanceof Error ? err.message : "sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function disconnect(installationId: number) {
     if (!currentTeamId) return;
     if (!confirm("Disconnect this GitHub installation from the team?")) return;
@@ -120,14 +149,39 @@ export default function GithubSettingsPage() {
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <Card>
-        <CardTitle>Installations</CardTitle>
-        <CardDescription className="mt-1">
-          {installations === null
-            ? "Loading…"
-            : installations.length === 0
-              ? "No installations connected yet."
-              : "Repos accessible from any of these installations can be deployed by this team."}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Installations</CardTitle>
+            <CardDescription className="mt-1">
+              {installations === null
+                ? "Loading…"
+                : installations.length === 0
+                  ? "No installations connected yet."
+                  : "Repos accessible from any of these installations can be deployed by this team."}
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={refreshing || syncing}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Button>
+            {canManage && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onSync}
+                disabled={syncing || refreshing || configured === false}
+                title="Pull every installation of the GitHub App into this team"
+              >
+                {syncing ? "Syncing…" : "Sync from GitHub"}
+              </Button>
+            )}
+          </div>
+        </div>
 
         {installations && installations.length > 0 && (
           <ul className="mt-4 divide-y divide-neutral-800">

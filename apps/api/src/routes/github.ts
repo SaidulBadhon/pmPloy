@@ -12,6 +12,7 @@ import {
   getInstallationAccount,
   installUrl,
   isGithubConfigured,
+  listAllAppInstallations,
   listInstallationRepos,
   listRepoBranches,
 } from "../services/github.ts";
@@ -104,6 +105,55 @@ route.post(
       { upsert: true, new: true },
     );
     return c.json(installationView(doc as unknown as GithubInstallationDoc), 201);
+  },
+);
+
+// Pull every installation of the GitHub App and upsert it onto this team.
+// Useful when the post-install redirect didn't reach our callback.
+route.post(
+  "/teams/:teamId/github/installations/sync",
+  requireTeamRole("admin"),
+  async (c) => {
+    if (!(await isGithubConfigured())) {
+      return c.json({ error: "github_not_configured" }, 503);
+    }
+    const teamId = c.req.param("teamId");
+    let installations;
+    try {
+      installations = await listAllAppInstallations();
+    } catch (err) {
+      if (err instanceof GithubNotConfiguredError) {
+        return c.json({ error: "github_not_configured" }, 503);
+      }
+      return c.json(
+        { error: "sync_failed", message: (err as Error).message },
+        502,
+      );
+    }
+    const docs = await Promise.all(
+      installations.map((inst) =>
+        GithubInstallation.findOneAndUpdate(
+          {
+            teamId: new Types.ObjectId(teamId),
+            installationId: inst.installationId,
+          },
+          {
+            teamId: new Types.ObjectId(teamId),
+            installationId: inst.installationId,
+            accountLogin: inst.account.login,
+            accountId: inst.account.id,
+            accountType: inst.account.type,
+            avatarUrl: inst.account.avatarUrl,
+          },
+          { upsert: true, new: true },
+        ),
+      ),
+    );
+    return c.json({
+      installations: docs.map((d) =>
+        installationView(d as unknown as GithubInstallationDoc),
+      ),
+    });
   },
 );
 
