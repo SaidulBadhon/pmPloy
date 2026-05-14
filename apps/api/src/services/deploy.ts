@@ -265,10 +265,11 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
         ...(eco.env ?? {}),
       };
       if (svc.port !== null) env.PORT = String(svc.port);
+      const svcCwd = eco.cwd ? path.resolve(app.cwd, eco.cwd) : app.cwd;
       const info = await startProcess({
         name: svc.pm2Name,
-        cwd: eco.cwd ? path.resolve(app.cwd, eco.cwd) : app.cwd,
-        script: eco.script,
+        cwd: svcCwd,
+        script: resolveScript(svcCwd, eco.script),
         interpreter: resolveInterpreter(eco.interpreter),
         args: eco.args,
         instances: eco.instances ?? 1,
@@ -308,7 +309,7 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
   const info = await startProcess({
     name: defaultName,
     cwd: app.cwd,
-    script: app.script,
+    script: resolveScript(app.cwd, app.script),
     interpreter: resolveInterpreter(app.interpreter || undefined),
     instances: app.instances ?? 1,
     execMode: app.execMode,
@@ -346,6 +347,37 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
  * PATH". If the value is already absolute, contains a slash, or can't be
  * found, return it unchanged so PM2's own error surfaces.
  */
+/**
+ * Resolve a PM2 `script` against `cwd`. PM2 takes the script literally, but
+ * in workspace monorepos (Bun/pnpm/npm with hoisting) a script like
+ * `node_modules/next/dist/bin/next` written from a workspace cwd may not exist
+ * there — the dependency lives in a parent `node_modules/`. Mimic Node's
+ * upward `node_modules` lookup: try the literal join first, then walk up
+ * parent directories looking for the same suffix. Falls back to the original
+ * value so PM2's "Script not found" error still surfaces if nothing matches.
+ */
+function resolveScript(cwd: string, script: string): string {
+  if (!script) return script;
+  if (path.isAbsolute(script)) return script;
+
+  const literal = path.resolve(cwd, script);
+  if (existsSync(literal)) return literal;
+
+  const marker = "node_modules" + path.sep;
+  const idx = script.indexOf(marker);
+  if (idx === -1) return script;
+
+  const suffix = script.slice(idx);
+  let dir = cwd;
+  while (true) {
+    const candidate = path.join(dir, suffix);
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) return script;
+    dir = parent;
+  }
+}
+
 function resolveInterpreter(name: string | undefined): string | undefined {
   if (!name) return undefined;
   if (name.includes("/")) return name;
