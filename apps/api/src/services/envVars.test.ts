@@ -4,16 +4,13 @@ import { EnvVar } from "../models/EnvVar.ts";
 import { seal } from "./crypto.ts";
 import { getDecryptedEnv } from "./envVars.ts";
 
-const TEST_KEY = "YW9UAiB4UKkVMxMyd2jNZVndzAJzTe1jkZtV2b/QTGg="; // 32 base64 bytes
-
 describe("getDecryptedEnv merge order", () => {
   const appId = new Types.ObjectId();
   const teamId = new Types.ObjectId();
 
   beforeEach(async () => {
-    process.env.ENV_ENCRYPTION_KEY = TEST_KEY;
     if (mongoose.connection.readyState === 0) {
-      await mongoose.connect("mongodb://127.0.0.1:27017/pmploy-test-envvars");
+      await mongoose.connect(process.env.MONGO_URI ?? "mongodb://127.0.0.1:27017/pmploy-test-envvars");
     }
     await EnvVar.deleteMany({ appId });
   });
