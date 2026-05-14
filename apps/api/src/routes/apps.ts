@@ -17,7 +17,7 @@ import {
   startProcess,
   stopProcess,
   restartProcess,
-  deleteProcess,
+  deleteAllPmployProcessesForApp,
   type Pm2Info,
 } from "../services/pm2.ts";
 import { caddy } from "../services/caddy.ts";
@@ -213,11 +213,9 @@ route.delete(
       await caddy.removeDomain(d.host).catch(() => undefined);
       await d.deleteOne();
     }
-    for (const svc of app.services ?? []) {
-      await deleteProcess(svc.pm2Name).catch(() => undefined);
-    }
-    // Legacy: also nuke the pre-namespacing process name if it ever existed.
-    await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
+    await deleteAllPmployProcessesForApp(String(app._id)).catch((err) => {
+      console.error("[apps] delete: PM2 teardown failed for app", app._id, err);
+    });
     await app.deleteOne();
     const user = c.get("user");
     await recordAudit({

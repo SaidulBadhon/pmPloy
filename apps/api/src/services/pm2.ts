@@ -100,6 +100,30 @@ export async function deleteProcess(name: string): Promise<void> {
   await withDaemon(() => deleteByNameInternal(name));
 }
 
+/**
+ * Deletes every PM2 entry pmploy created for this app: multi-service names
+ * (`pmploy:<appId>:…`), the default name, and the legacy unsuffixed
+ * `pmploy:<appId>`. Use this on app teardown so empty/stale `services` arrays
+ * cannot skip removals.
+ */
+export async function deleteAllPmployProcessesForApp(appId: string): Promise<void> {
+  const legacy = `pmploy:${appId}`;
+  const prefix = `pmploy:${appId}:`;
+  await withDaemon(async () => {
+    const procs = await new Promise<ProcessDescription[]>((resolve, reject) => {
+      pm2.list((err, list) => (err ? reject(err) : resolve(list ?? [])));
+    });
+    const targets = [
+      ...new Set(
+        procs
+          .map((p) => p.name ?? "")
+          .filter((n) => n === legacy || n.startsWith(prefix)),
+      ),
+    ];
+    await Promise.all(targets.map((n) => deleteByNameInternal(n)));
+  });
+}
+
 function deleteByNameInternal(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     pm2.delete(name, (err) => {
