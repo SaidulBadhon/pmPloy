@@ -47,7 +47,9 @@ route.get(
   async (c) => {
     const app = await loadApp(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
-    const vars = await EnvVar.find({ appId: app._id }).sort({ key: 1 }).lean();
+    const vars = await EnvVar.find({ appId: app._id, serviceName: "" })
+      .sort({ key: 1 })
+      .lean();
     return c.json({
       vars: vars.map((v) => view(v as unknown as EnvVarDoc)),
     });
@@ -72,10 +74,11 @@ route.put(
     const { value } = c.req.valid("json");
     const sealed = seal(value);
     const doc = await EnvVar.findOneAndUpdate(
-      { appId: app._id, key },
+      { appId: app._id, serviceName: "", key },
       {
         appId: app._id,
         teamId: app.teamId,
+        serviceName: "",
         key,
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -103,7 +106,7 @@ route.delete(
     const app = await loadApp(c.req.param("teamId"), c.req.param("appId"));
     if (!app) return c.json({ error: "not found" }, 404);
     const key = c.req.param("key");
-    await EnvVar.deleteOne({ appId: app._id, key });
+    await EnvVar.deleteOne({ appId: app._id, serviceName: "", key });
     const user = c.get("user");
     await recordAudit({
       teamId: String(app.teamId),
