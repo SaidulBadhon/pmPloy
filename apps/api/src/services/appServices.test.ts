@@ -18,7 +18,7 @@ describe("reconcileServices", () => {
       port: 3000,
       isPrimary: true,
     });
-    expect(out.services[1].isPrimary).toBe(false);
+    expect(out.services[1]?.isPrimary).toBe(false);
     expect(out.removed).toEqual([]);
   });
 
@@ -28,9 +28,9 @@ describe("reconcileServices", () => {
       { name: "worker", pm2Name: `pmploy:${appId}:worker`, port: null, isPrimary: true },
     ];
     const out = reconcileServices(appId, existing, [ecoApp("web", 3000), ecoApp("worker")]);
-    expect(out.services[0].port).toBe(9999);
-    expect(out.services[1].isPrimary).toBe(true);
-    expect(out.services[0].isPrimary).toBe(false);
+    expect(out.services[0]?.port).toBe(9999);
+    expect(out.services[1]?.isPrimary).toBe(true);
+    expect(out.services[0]?.isPrimary).toBe(false);
   });
 
   test("marks removed services for teardown", () => {

@@ -47,8 +47,9 @@ export function reconcileServices(
   const removed = existing.filter((s) => !parsedNames.has(s.name));
 
   // Ensure exactly one primary (only if there's at least one service).
-  if (services.length > 0 && !services.some((s) => s.isPrimary)) {
-    services[0].isPrimary = true;
+  const first = services[0];
+  if (first && !services.some((s) => s.isPrimary)) {
+    first.isPrimary = true;
   }
 
   return { services, removed };
