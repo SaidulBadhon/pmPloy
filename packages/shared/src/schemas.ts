@@ -16,6 +16,7 @@ export const AppStatusSchema = z.enum([
   "created",
   "deploying",
   "running",
+  "degraded",
   "stopped",
   "errored",
 ]);
@@ -155,6 +156,15 @@ export const Pm2InfoSchema = z.object({
 });
 export type Pm2Info = z.infer<typeof Pm2InfoSchema>;
 
+export const PublicServiceSchema = z.object({
+  name: z.string(),
+  pm2Name: z.string(),
+  port: z.number().nullable(),
+  isPrimary: z.boolean(),
+  pm2: Pm2InfoSchema.nullable(),
+});
+export type PublicService = z.infer<typeof PublicServiceSchema>;
+
 export const GithubSourceSchema = z.object({
   installationId: z.number(),
   repo: z.string(),
@@ -180,6 +190,7 @@ export const PublicApplicationSchema = z.object({
   status: AppStatusSchema,
   pm2Name: z.string(),
   pm2: Pm2InfoSchema.nullable(),
+  services: z.array(PublicServiceSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -290,6 +301,7 @@ export const AttachDomainInputSchema = z.object({
     .toLowerCase()
     .max(253)
     .regex(HOST_REGEX, "invalid hostname"),
+  serviceName: z.string().trim().max(80).optional().default(""),
 });
 export type AttachDomainInput = z.infer<typeof AttachDomainInputSchema>;
 
@@ -300,6 +312,7 @@ export const PublicDomainSchema = z.object({
   host: z.string(),
   sslStatus: SslStatusSchema,
   lastError: z.string(),
+  serviceName: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -12,6 +12,7 @@ const domainSchema = new Schema(
       required: true,
     },
     lastError: { type: String, default: "" },
+    serviceName: { type: String, default: "" }, // "" = route to the primary service
   },
   { timestamps: true },
 );

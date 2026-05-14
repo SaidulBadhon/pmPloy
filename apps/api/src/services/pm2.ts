@@ -152,5 +152,9 @@ function toInfo(p: ProcessDescription): Pm2Info {
 }
 
 export function pm2NameForApp(appId: string): string {
-  return `pmploy:${appId}`;
+  return pm2NameForService(appId, "default");
+}
+
+export function pm2NameForService(appId: string, serviceName: string): string {
+  return `pmploy:${appId}:${serviceName}`;
 }
