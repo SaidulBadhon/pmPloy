@@ -14,6 +14,7 @@ import AppsListPage from "./pages/AppsListPage";
 import NewAppPage from "./pages/NewAppPage";
 import AppDetailPage from "./pages/AppDetailPage";
 import DeploymentDetailPage from "./pages/DeploymentDetailPage";
+import ServiceDetailPage from "./pages/ServiceDetailPage";
 import TeamPage from "./pages/TeamPage";
 import GithubSettingsPage from "./pages/GithubSettingsPage";
 import PlatformPage from "./pages/PlatformPage";
@@ -82,6 +83,10 @@ export default function App() {
           <Route
             path="apps/:appId/deployments/:deploymentId"
             element={<DeploymentDetailPage />}
+          />
+          <Route
+            path="apps/:appId/services/:serviceName"
+            element={<ServiceDetailPage />}
           />
           <Route path="team" element={<TeamPage />} />
           <Route path="settings/github" element={<GithubSettingsPage />} />

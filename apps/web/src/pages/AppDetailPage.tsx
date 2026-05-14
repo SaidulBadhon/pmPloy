@@ -8,6 +8,7 @@ import { Card, CardDescription, CardTitle } from "../components/ui/Card";
 import { StatusPill } from "../components/ui/StatusPill";
 import { DomainsCard } from "../components/DomainsCard";
 import { EnvVarsCard } from "../components/EnvVarsCard";
+import { ServicesCard } from "../components/ServicesCard";
 import { MetricsChart } from "../components/MetricsChart";
 import { useMetricSamples } from "../hooks/useMetricSamples";
 import { bytes, ms } from "../lib/format";
@@ -199,25 +200,27 @@ export default function AppDetailPage() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardTitle>Process</CardTitle>
-          <CardDescription className="mt-1">PM2 runtime snapshot.</CardDescription>
-          <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
-            <dt className="text-neutral-500">status</dt>
-            <dd className="font-mono">{app.pm2?.status ?? "not running"}</dd>
-            <dt className="text-neutral-500">pid</dt>
-            <dd className="font-mono">{app.pm2?.pid || "—"}</dd>
-            <dt className="text-neutral-500">cpu</dt>
-            <dd className="font-mono">{app.pm2 ? `${app.pm2.cpu}%` : "—"}</dd>
-            <dt className="text-neutral-500">memory</dt>
-            <dd className="font-mono">{app.pm2 ? bytes(app.pm2.memory) : "—"}</dd>
-            <dt className="text-neutral-500">uptime</dt>
-            <dd className="font-mono">{app.pm2 ? ms(app.pm2.uptime) : "—"}</dd>
-            <dt className="text-neutral-500">restarts</dt>
-            <dd className="font-mono">{app.pm2?.restarts ?? 0}</dd>
-          </dl>
-        </Card>
+      <div className={`grid gap-4 ${app.services.length > 1 ? "" : "md:grid-cols-2"}`}>
+        {app.services.length <= 1 && (
+          <Card>
+            <CardTitle>Process</CardTitle>
+            <CardDescription className="mt-1">PM2 runtime snapshot.</CardDescription>
+            <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
+              <dt className="text-neutral-500">status</dt>
+              <dd className="font-mono">{app.pm2?.status ?? "not running"}</dd>
+              <dt className="text-neutral-500">pid</dt>
+              <dd className="font-mono">{app.pm2?.pid || "—"}</dd>
+              <dt className="text-neutral-500">cpu</dt>
+              <dd className="font-mono">{app.pm2 ? `${app.pm2.cpu}%` : "—"}</dd>
+              <dt className="text-neutral-500">memory</dt>
+              <dd className="font-mono">{app.pm2 ? bytes(app.pm2.memory) : "—"}</dd>
+              <dt className="text-neutral-500">uptime</dt>
+              <dd className="font-mono">{app.pm2 ? ms(app.pm2.uptime) : "—"}</dd>
+              <dt className="text-neutral-500">restarts</dt>
+              <dd className="font-mono">{app.pm2?.restarts ?? 0}</dd>
+            </dl>
+          </Card>
+        )}
 
         <Card>
           <CardTitle>Configuration</CardTitle>
@@ -252,6 +255,8 @@ export default function AppDetailPage() {
           <MetricsChart samples={samples} />
         </div>
       </Card>
+
+      <ServicesCard appId={app.id} services={app.services} />
 
       {currentTeamId && (
         <EnvVarsCard

@@ -255,11 +255,11 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
     // single-process name might still be alive.
     await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
 
-    const userEnv = await getDecryptedEnv(String(app._id));
     for (const svc of services) {
       const eco = parsed.apps.find((a) => a.name === svc.name);
       if (!eco) continue;
       await ctx.log(`▶ launching service ${svc.name} (${svc.pm2Name})`);
+      const userEnv = await getDecryptedEnv(String(app._id), svc.name);
       const env: Record<string, string> = {
         ...userEnv,
         ...(eco.env ?? {}),
@@ -304,7 +304,7 @@ async function startServices(app: AppDoc, ctx: LogContext): Promise<void> {
   // Tear down the legacy un-suffixed process if it still exists.
   await deleteProcess(`pmploy:${String(app._id)}`).catch(() => undefined);
 
-  const userEnv = await getDecryptedEnv(String(app._id));
+  const userEnv = await getDecryptedEnv(String(app._id), "default");
   await ctx.log(`▶ launching ${app.script} (${defaultName})`);
   const info = await startProcess({
     name: defaultName,

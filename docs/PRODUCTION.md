@@ -807,5 +807,19 @@ If your repository contains an `ecosystem.config.{cjs,js,json}` in the build dir
 
 ---
 
+## Per-service env vars index migration
+
+The `EnvVar` collection's unique index changed from `{ appId: 1, key: 1 }` to
+`{ appId: 1, serviceName: 1, key: 1 }`. Mongoose auto-indexes on app start in
+development. In production, drop the old index once after upgrading:
+
+```js
+db.envvars.dropIndex("appId_1_key_1")
+```
+
+Existing rows are read as `serviceName: ""` (shared / app-level) automatically.
+
+---
+
 If anything in this guide is ambiguous on your distro/setup, please open an
 issue — patches welcome.
